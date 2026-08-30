@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# start.sh — P1: boot mcp_fs_server, wait until :8000 answers, then start ngrok.
 set -euo pipefail
 cd "$(dirname "$0")"
 

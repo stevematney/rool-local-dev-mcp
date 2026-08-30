@@ -9,10 +9,15 @@ import time
 import urllib.request
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parent
-PORT = int(os.environ.get("PORT", "8000"))
-NGROK_URL = os.environ.get(
-    "NGROK_URL", "https://your-subdomain.ngrok-free.dev")
+load_dotenv(ROOT / ".env")
+
+PORT = int(os.getenv("PORT", "8000"))
+NGROK_URL = os.getenv("NGROK_URL")
+if not NGROK_URL:
+    raise SystemExit("NGROK_URL must be set in .env")
 
 SERVER_CMD = [sys.executable, str(ROOT / "mcp_fs_server.py")]
 NGROK_CMD = ["ngrok", "http", str(PORT), "--url", NGROK_URL]

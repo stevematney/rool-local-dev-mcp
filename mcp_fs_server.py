@@ -18,8 +18,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 PORT = 8000
-BIND_HOST = "::"          # both stacks; ngrok probes IPv6 loopback first
-# project folder = sandbox for P1
+BIND_HOST = "::"
 SANDBOX_ROOT = Path(__file__).resolve().parent
 
 server = MCPServer(

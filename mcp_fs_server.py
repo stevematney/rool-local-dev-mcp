@@ -10,16 +10,20 @@ Run:  python3 mcp_fs_server.py            (from this directory)
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
+from dotenv import load_dotenv
 from mcp.server import MCPServer
 from starlette.requests import Request
 from starlette.responses import Response
 
-PORT = 8000
-BIND_HOST = "::"
-SANDBOX_ROOT = Path(__file__).resolve().parent
+load_dotenv()
+
+PORT = int(os.getenv("PORT", "8000"))
+BIND_HOST = os.getenv("BIND_HOST", "::")
+SANDBOX_ROOT = Path(os.getenv("SANDBOX_ROOT", Path(__file__).resolve().parent)).resolve()
 
 server = MCPServer(
     name="rool-fs",

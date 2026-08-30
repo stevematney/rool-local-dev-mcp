@@ -11,7 +11,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PORT", "8000"))
-NGROK_URL = os.environ.get("NGROK_URL", "https://your-subdomain.ngrok-free.dev")
+NGROK_URL = os.environ.get(
+    "NGROK_URL", "https://your-subdomain.ngrok-free.dev")
 
 SERVER_CMD = [sys.executable, str(ROOT / "mcp_fs_server.py")]
 NGROK_CMD = ["ngrok", "http", str(PORT), "--url", NGROK_URL]
@@ -29,7 +30,7 @@ def spawn_process_group(cmd: list[str]) -> subprocess.Popen[bytes]:
 def wait_for_health(port: int, attempts: int = 50, delay: float = 0.2) -> bool:
     for _ in range(attempts):
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=1):
+            with urllib.request.urlopen(f"http://localhost:{port}/health", timeout=1):
                 return True
         except Exception:
             time.sleep(delay)
@@ -74,7 +75,7 @@ def main() -> None:
 
     tracked_processes = [ngrok, server]
 
-    def shutdown(*_args: object) -> None:
+    def shutdown(*_: object) -> None:
         print("[launcher] shutting down...")
         terminate_processes(tracked_processes)
         sys.exit(0)
@@ -87,7 +88,8 @@ def main() -> None:
             time.sleep(1)
             for proc in tracked_processes:
                 if proc.poll() is not None:
-                    print(f"[launcher] child exited ({proc.pid})", file=sys.stderr)
+                    print(
+                        f"[launcher] child exited ({proc.pid})", file=sys.stderr)
                     shutdown()
     except KeyboardInterrupt:
         shutdown()

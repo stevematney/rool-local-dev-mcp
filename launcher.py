@@ -17,7 +17,7 @@ SERVER_CMD = [sys.executable, str(ROOT / "mcp_fs_server.py")]
 NGROK_CMD = ["ngrok", "http", str(PORT), "--url", NGROK_URL]
 
 
-def spawn_process_group(cmd: list[str]) -> subprocess.Popen:
+def spawn_process_group(cmd: list[str]) -> subprocess.Popen[bytes]:
     return subprocess.Popen(
         cmd,
         start_new_session=True,
@@ -36,7 +36,7 @@ def wait_for_health(port: int, attempts: int = 50, delay: float = 0.2) -> bool:
     return False
 
 
-def kill_process_group(proc: subprocess.Popen, sig: signal.Signals) -> None:
+def kill_process_group(proc: subprocess.Popen[bytes], sig: signal.Signals) -> None:
     if proc.poll() is None:
         try:
             os.killpg(proc.pid, sig)
@@ -44,7 +44,7 @@ def kill_process_group(proc: subprocess.Popen, sig: signal.Signals) -> None:
             pass
 
 
-def terminate_processes(processes: list[subprocess.Popen], grace_period: float = 3.0) -> None:
+def terminate_processes(processes: list[subprocess.Popen[bytes]], grace_period: float = 3.0) -> None:
     for proc in processes:
         kill_process_group(proc, signal.SIGTERM)
 
@@ -74,7 +74,7 @@ def main() -> None:
 
     tracked_processes = [ngrok, server]
 
-    def shutdown(*_args) -> None:
+    def shutdown(*_args: object) -> None:
         print("[launcher] shutting down...")
         terminate_processes(tracked_processes)
         sys.exit(0)

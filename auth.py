@@ -357,5 +357,7 @@ def build_app(mcp_server) -> ASGIApp:
     mcp_app = mcp_server.streamable_http_app()
     app.mount("/mcp", mcp_app, name="mcp")
     # Wrap the whole assembly in session middleware (signed owner login cookie).
-    app = SessionMiddleware(app, secret_key=os.getenv("SESSION_SECRET", "dev-secret"))
+    # Per-boot ephemeral key: consent sessions never survive a restart,
+    # so no durable secret exists that could forge the owner's session.
+    app = SessionMiddleware(app, secret_key=secrets.token_urlsafe(32))
     return app

@@ -94,7 +94,8 @@ async def main() -> None:
     print(f"rool-fs P2 on {BIND_HOST}:{PORT}  sandbox={SANDBOX_ROOT}")
     import uvicorn
     config = uvicorn.Config(app, host=BIND_HOST,
-                            port=PORT, log_level="warning")
+                            port=PORT, log_level="info",
+                            access_log=True)
     await uvicorn.Server(config).serve()
 
 

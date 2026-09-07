@@ -20,6 +20,7 @@ from typing import AsyncIterator, Any
 
 from dotenv import load_dotenv
 from pydantic import AnyHttpUrl
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
@@ -417,7 +418,21 @@ def build_app(mcp_server) -> ASGIApp:
     # /mcp route internally, so mounting it at /mcp would produce /mcp/mcp.
     # Its session manager needs its lifespan (task group) started; mounted
     # sub-apps don't get lifespan events, so drive it on the outer app's lifespan.
-    mcp_app = mcp_server.streamable_http_app()
+    # The MCPServer constructor takes auth_server_provider/token_verifier;
+    # streamable_http_app() only forwards what the server was constructed with.
+    # So don't try to pass them here -- auth config on MCPServer happens at
+    # construction time. Our composition in build_app adds the outer auth routes.
+    mcp_app = mcp_server.streamable_http_app(
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            # Only the tunnel hostname (plus loopback for local testing) may
+            # address the transport; everything else gets a 421.
+            allowed_hosts=[urllib.parse.urlparse(BASE_URL).netloc, "127.0.0.1:*", "localhost:*", "[::1]:*"],
+            allowed_origins=[BASE_URL],
+        ),
+        # The provider/token_verifier live on the MCPServer instance (set at
+        # construction); streamable_http_app() forwards them itself.
+    )
     app.mount("/", mcp_app, name="mcp")
     outer_lifespan = app.router.lifespan_context
 

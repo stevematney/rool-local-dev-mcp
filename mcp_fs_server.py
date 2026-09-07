@@ -12,6 +12,7 @@ Run:  python3 mcp_fs_server.py            (from this directory)
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 from pathlib import Path
@@ -23,7 +24,8 @@ load_dotenv()
 
 PORT = int(os.getenv("PORT", "8000"))
 BIND_HOST = os.getenv("BIND_HOST", "::")
-SANDBOX_ROOT = Path(os.getenv("SANDBOX_ROOT", Path(__file__).resolve().parent)).resolve()
+SANDBOX_ROOT = Path(os.getenv("SANDBOX_ROOT", Path(
+    __file__).resolve().parent)).resolve()
 
 server = MCPServer(
     name="rool-fs",
@@ -91,9 +93,10 @@ async def main() -> None:
     app = build_app(server)
     print(f"rool-fs P2 on {BIND_HOST}:{PORT}  sandbox={SANDBOX_ROOT}")
     import uvicorn
-    config = uvicorn.Config(app, host=BIND_HOST, port=PORT, log_level="warning")
-    uvicorn.Server(config).run()
+    config = uvicorn.Config(app, host=BIND_HOST,
+                            port=PORT, log_level="warning")
+    await uvicorn.Server(config).serve()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

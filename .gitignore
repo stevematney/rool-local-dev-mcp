@@ -1,3 +1,10 @@
 __pycache__/
 *.pyc
 .env
+
+# P2 auth db (generated)
+rool_fs.db
+rool_tokens.json
+
+# machine-local venv symlink (setup.sh)
+.venv

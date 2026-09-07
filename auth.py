@@ -9,14 +9,12 @@ after the browser has an owner session cookie.
 """
 from __future__ import annotations
 
-import hashlib
 import hmac
 import json
 import os
 import secrets
 import urllib.parse
 import urllib.request
-from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -144,8 +142,10 @@ async def consent(request: Request) -> Response:
     # Pending device-flow approvals surface here for the owner to approve.
     user_code = request.query_params.get("user_code", "")
     device = db.find_device_by_user_code(user_code) if user_code else None
-    client_id = device["client_id"] if device else request.query_params.get("client_id", "")
-    scope = device["scope"] if device else request.query_params.get("scope", "")
+    client_id = device["client_id"] if device else request.query_params.get(
+        "client_id", "")
+    scope = device["scope"] if device else request.query_params.get(
+        "scope", "")
     hidden_hash = (
         f'<input type="hidden" name="device_code_hash" value="{device["device_code_hash"]}">'
         if device else ""
@@ -162,7 +162,7 @@ async def consent(request: Request) -> Response:
 <form method="post" action="/consent">
   <input type="hidden" name="client_id" value="{client_id}">
   <input type="hidden" name="scope" value="{scope}">
-  <input type="hidden" name="state" value="{request.query_params.get('state','')}">
+  <input type="hidden" name="state" value="{request.query_params.get('state', '')}">
   {hidden_hash}
   <button name="decision" value="approve">Approve</button>
   <button name="decision" value="deny">Deny</button>
@@ -171,7 +171,8 @@ async def consent(request: Request) -> Response:
 
 # ------------------------------------------------------------ OAuth AS provider
 class RoolProvider(
-    OAuthAuthorizationServerProvider[AuthorizationCode, RefreshToken, AccessToken]
+    OAuthAuthorizationServerProvider[AuthorizationCode,
+                                     RefreshToken, AccessToken]
 ):
     """Full implementation of the SDK's OAuth provider Protocol."""
 
@@ -229,7 +230,8 @@ class RoolProvider(
         client: OAuthClientInformationFull,
         authorization_code: AuthorizationCode,
     ) -> OAuthToken:
-        tok = db.new_token(client.client_id, ",".join(authorization_code.scopes), "owner")
+        tok = db.new_token(client.client_id, ",".join(
+            authorization_code.scopes), "owner")
         return OAuthToken(
             access_token=tok["access_token"],
             refresh_token=tok["refresh_token"],
@@ -389,7 +391,8 @@ def build_app(mcp_server) -> ASGIApp:
     )
     app = Starlette(
         routes=[
-            Route("/health", lambda _: Response("OK mcp-fs p2\n", media_type="text/plain")),
+            Route("/health", lambda _: Response("OK mcp-fs p2\n",
+                  media_type="text/plain")),
             Route("/auth/login", login),
             Route("/auth/callback", callback),
             Route("/consent", consent),

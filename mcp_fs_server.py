@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-mcp_fs_server.py — P1 minimal MCP server skeleton (rool-fs).
+mcp_fs_server.py — rool-fs MCP server with OAuth 2.1 (P2).
 
-Phase target: prove the tunnel loop. Serves a streamable-HTTP MCP server on
-:8000 at /mcp, plus a /health endpoint, plus sandboxed fs tools behind a
-path gate. Auth = NONE YET (P2). Approval = NONE YET (P4).
+Shapes:
+  - :8000 (tunnel-exposed)  AS + protected resource: /mcp, /health,
+                            /.well-known/oauth-authorization-server, /authorize,
+                            /token, /register, /revoke, /auth/login, /auth/callback
+  - owner consent via GitHub OIDC-style login, then approve/deny
 
 Run:  python3 mcp_fs_server.py            (from this directory)
 """
@@ -16,8 +18,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from mcp.server import MCPServer
-from starlette.requests import Request
-from starlette.responses import Response
 
 load_dotenv()
 
@@ -84,21 +84,16 @@ async def search_dir(pattern: str, path: str = ".") -> str:
     return "\n".join(sorted(hits))
 
 
-@server.custom_route("/health", methods=["GET"])
-async def health(_: Request) -> Response:
-    return Response(content="OK mcp-fs p1\n", media_type="text/plain")
+from auth import build_app  # noqa: E402  (after tools are registered)
 
 
 async def main() -> None:
-    print(f"MCP fs server (P1) on {BIND_HOST}:{PORT}  sandbox={SANDBOX_ROOT}")
-    await server.run_streamable_http_async(
-        host=BIND_HOST,
-        port=PORT,
-        streamable_http_path="/mcp",
-    )
+    app = build_app(server)
+    print(f"rool-fs P2 on {BIND_HOST}:{PORT}  sandbox={SANDBOX_ROOT}")
+    import uvicorn
+    config = uvicorn.Config(app, host=BIND_HOST, port=PORT, log_level="warning")
+    uvicorn.Server(config).run()
 
 
 if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(main())
+    main()

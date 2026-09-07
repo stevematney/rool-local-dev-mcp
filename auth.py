@@ -111,6 +111,11 @@ async def login(request: Request) -> Response:
     })
     # stash state in a cookie (Starlette SessionMiddleware signs it)
     request.session["gh_state"] = state
+    # Preserve a pending device-flow approval across the GitHub redirect:
+    # the browser's user_code must survive the OAuth round-trip.
+    pending_user_code = request.query_params.get("user_code", "")
+    if pending_user_code:
+        request.session["pending_user_code"] = pending_user_code
     return RedirectResponse(f"{GITHUB_AUTH}?{params}")
 
 
@@ -129,7 +134,9 @@ async def callback(request: Request) -> Response:
     if login != OWNER_GITHUB:
         return Response(f"not authorized: {login}", status_code=403)
     sid = _sessions.create(login)
-    response = RedirectResponse("/consent")
+    pending_user_code = request.session.pop("pending_user_code", "")
+    target = f"/consent?user_code={urllib.parse.quote(pending_user_code)}" if pending_user_code else "/consent"
+    response = RedirectResponse(target)
     response.set_cookie("rool_owner", sid, httponly=True, samesite="lax")
     return response
 

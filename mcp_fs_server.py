@@ -19,8 +19,21 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from mcp.server import MCPServer
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
+from pydantic import AnyHttpUrl
 
 load_dotenv()
+
+BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+
+
+# The provider doubles as the token verifier: the SDK wraps /mcp with
+# BearerAuthBackend + RequireAuthMiddleware using auth_server_provider.
+# Instantiated once here so MCPServer construction has it; auth.build_app
+# reuses the same provider for the outer AS routes.
+from auth import RoolProvider  # noqa: E402  (after load_dotenv)
+
+auth_provider = RoolProvider()
 
 PORT = int(os.getenv("PORT", "8000"))
 BIND_HOST = os.getenv("BIND_HOST", "::")
@@ -31,6 +44,13 @@ server = MCPServer(
     name="rool-fs",
     title="rool-fs project filesystem",
     instructions="Sandboxed read/write tools scoped to the project folder.",
+    auth=AuthSettings(
+        issuer_url=AnyHttpUrl(BASE_URL),
+        resource_server_url=AnyHttpUrl(f"{BASE_URL}/mcp"),
+        required_scopes=["fs"],
+        client_registration_options=ClientRegistrationOptions(enabled=True),
+    ),
+    auth_server_provider=auth_provider,
 )
 
 

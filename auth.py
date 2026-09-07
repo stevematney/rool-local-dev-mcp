@@ -38,7 +38,7 @@ from mcp.server.auth.routes import (
     create_auth_routes,
     create_protected_resource_routes,
 )
-from mcp.server.auth.settings import AuthSettings
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
 import db
@@ -383,7 +383,9 @@ def build_app(mcp_server) -> ASGIApp:
         resource_server_url=AnyHttpUrl(f"{BASE_URL}/mcp"),
     )
     routes = create_auth_routes(
-        provider, settings.issuer_url
+        provider,
+        settings.issuer_url,
+        client_registration_options=ClientRegistrationOptions(enabled=True),
     )
     protected = create_protected_resource_routes(
         AnyHttpUrl(f"{BASE_URL}/mcp"),

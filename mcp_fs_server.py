@@ -55,12 +55,44 @@ server = MCPServer(
 
 
 def _abs(p: str) -> Path:
-    """Resolve inside SANDBOX_ROOT; escape -> PermissionError."""
+    """Resolve inside SANDBOX_ROOT; escape or deny-list hit -> PermissionError."""
     root = SANDBOX_ROOT.resolve()
     candidate = (root / p).resolve()
     if not candidate.is_relative_to(root):
         raise PermissionError(f"escape attempt blocked: {p}")
+    _check_blocklist(candidate, p)
     return candidate
+
+
+# Central deny-list: any path matching these patterns is inaccessible to
+# every tool op (read, write, list, search). Enforced in _abs() and
+# search_dir(); symlink resolution happens before matching (candidate is
+# already resolved), so links pointing at blocked files are caught too.
+BLOCKLIST_PATTERNS = (
+    ".env",
+    ".env.*",
+    "*.pem",
+    "*.key",
+    ".git",
+    "rool_fs.db",
+)
+
+
+def _is_blocked(candidate: Path) -> bool:
+    rel = candidate.relative_to(SANDBOX_ROOT)
+    parts = rel.parts
+    for pat in BLOCKLIST_PATTERNS:
+        if "*" in pat:
+            if rel.match(pat):
+                return True
+        elif pat in parts:  # file or directory component (e.g. .git/ anything)
+            return True
+    return False
+
+
+def _check_blocklist(candidate: Path, raw: str) -> None:
+    if _is_blocked(candidate):
+        raise PermissionError(f"blocked by deny-list: {raw}")
 
 
 @server.tool()
@@ -95,6 +127,12 @@ async def search_dir(pattern: str, path: str = ".") -> str:
     hits = []
     for f in root.joinpath(path).rglob("*"):
         if f.is_file():
+            if f.is_symlink():
+                f = f.resolve()
+                if not f.is_relative_to(root) or _is_blocked(f):
+                    continue
+            elif _is_blocked(f):
+                continue
             try:
                 txt = f.read_text(errors="replace")
             except Exception:

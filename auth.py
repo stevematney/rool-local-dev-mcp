@@ -15,7 +15,8 @@ import os
 import secrets
 import urllib.parse
 import urllib.request
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Any
 
 from dotenv import load_dotenv
 from pydantic import AnyHttpUrl
@@ -412,9 +413,21 @@ def build_app(mcp_server) -> ASGIApp:
             *protected,
         ],
     )
-    # Mount the MCP streamable-HTTP app at /mcp (it returns a full Starlette app).
+    # Mount the MCP streamable-HTTP app at root: it already registers its own
+    # /mcp route internally, so mounting it at /mcp would produce /mcp/mcp.
+    # Its session manager needs its lifespan (task group) started; mounted
+    # sub-apps don't get lifespan events, so drive it on the outer app's lifespan.
     mcp_app = mcp_server.streamable_http_app()
-    app.mount("/mcp", mcp_app, name="mcp")
+    app.mount("/", mcp_app, name="mcp")
+    outer_lifespan = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(_: Starlette) -> AsyncIterator[None]:
+        async with mcp_app.router.lifespan_context(mcp_app):
+            async with outer_lifespan(app):
+                yield
+
+    app.router.lifespan_context = lifespan
     # Wrap the whole assembly in session middleware (signed owner login cookie).
     # Per-boot ephemeral key: consent sessions never survive a restart,
     # so no durable secret exists that could forge the owner's session.

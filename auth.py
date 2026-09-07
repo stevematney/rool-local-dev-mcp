@@ -141,17 +141,29 @@ async def consent(request: Request) -> Response:
     owner = _sessions.get(sid)
     if not owner:
         return RedirectResponse("/auth/login")
-    client_id = request.query_params.get("client_id", "")
-    scope = request.query_params.get("scope", "")
+    # Pending device-flow approvals surface here for the owner to approve.
+    user_code = request.query_params.get("user_code", "")
+    device = db.find_device_by_user_code(user_code) if user_code else None
+    client_id = device["client_id"] if device else request.query_params.get("client_id", "")
+    scope = device["scope"] if device else request.query_params.get("scope", "")
+    hidden_hash = (
+        f'<input type="hidden" name="device_code_hash" value="{device["device_code_hash"]}">'
+        if device else ""
+    )
+    pending_note = (
+        f"<p>Device code <code>{user_code}</code> is awaiting approval.</p>" if device else ""
+    )
     return HTMLResponse(f"""<!doctype html>
 <meta charset="utf-8"><title>rool-fs consent</title>
 <h1>Approve MCP client?</h1>
 <p>Logged in as <strong>{owner}</strong></p>
+{pending_note}
 <p>Client <code>{client_id}</code> requests scope <code>{scope}</code></p>
 <form method="post" action="/consent">
   <input type="hidden" name="client_id" value="{client_id}">
   <input type="hidden" name="scope" value="{scope}">
   <input type="hidden" name="state" value="{request.query_params.get('state','')}">
+  {hidden_hash}
   <button name="decision" value="approve">Approve</button>
   <button name="decision" value="deny">Deny</button>
 </form>""")
@@ -310,23 +322,56 @@ async def consent_post(request: Request) -> Response:
     client_id = str(form.get("client_id", ""))
     scope = str(form.get("scope", "fs"))
     db.remember_consent(owner, client_id, scope)
-    # Export a token for the machine client (headless): the AS writes it to
-    # TOKEN_FILE; the Rool VM reads it from the tunnel side (bootstrap path).
-    tok = db.new_token(client_id, scope, owner)
-    token_file = os.getenv("TOKEN_FILE", "")
-    if token_file:
-        try:
-            Path(token_file).write_text(json.dumps({
-                "access_token": tok["access_token"],
-                "refresh_token": tok["refresh_token"],
-                "expires_in": tok["expires_in"],
-                "token_type": "Bearer",
-                "scope": scope,
-                "client_id": client_id,
-            }, indent=2))
-        except OSError as e:
-            return HTMLResponse(f"<p>Approved. Consent recorded, but token export failed: {e}</p>")
-    return HTMLResponse("<p>Approved. Consent recorded and token exported.</p>")
+    # A pending device-flow approval (headless client) completes here.
+    pending_hash = str(form.get("device_code_hash", ""))
+    if pending_hash:
+        pending = db.find_device_by_hash(pending_hash)
+        if pending:
+            db.approve_device(pending_hash)
+            return HTMLResponse("<p>Approved. The device flow client can now poll for its token.</p>")
+    return HTMLResponse("<p>Approved. Consent recorded.</p>")
+
+
+async def device_authorize(request: Request) -> Response:
+    """RFC 8628 device authorization endpoint (headless clients)."""
+    form = await request.form()
+    client_id = str(form.get("client_id", ""))
+    client = db.get_client(client_id) if client_id else None
+    if not client:
+        return JSONResponse({"error": "invalid_client"}, status_code=400)
+    scope = str(form.get("scope", "fs"))
+    d = db.new_device_code(client_id, scope)
+    return JSONResponse({
+        "device_code": d["device_code"],
+        "user_code": d["user_code"],
+        "verification_uri": f"{BASE_URL}/consent",
+        "expires_in": 600,
+        "interval": 5,
+    })
+
+
+async def device_token(request: Request) -> Response:
+    """Token poll for the device grant; issues tokens once the owner approves."""
+    form = await request.form()
+    device_code = str(form.get("device_code", ""))
+    client_id = str(form.get("client_id", ""))
+    info = db.consume_device_code(db.hash_value(device_code))
+    if not info:
+        pending = db.find_device_by_hash(db.hash_value(device_code))
+        if pending and pending["status"] == "pending":
+            return JSONResponse({"error": "authorization_pending"}, status_code=400)
+        return JSONResponse({"error": "expired_token"}, status_code=400)
+    if info["client_id"] != client_id:
+        return JSONResponse({"error": "invalid_client"}, status_code=400)
+    owner = db.get_last_consent_owner(info["client_id"])
+    tok = db.new_token(client_id, info["scope"], owner or "unknown")
+    return JSONResponse({
+        "access_token": tok["access_token"],
+        "refresh_token": tok["refresh_token"],
+        "token_type": "Bearer",
+        "expires_in": tok["expires_in"],
+        "scope": info["scope"],
+    })
 
 
 def build_app(mcp_server) -> ASGIApp:
@@ -349,6 +394,8 @@ def build_app(mcp_server) -> ASGIApp:
             Route("/auth/callback", callback),
             Route("/consent", consent),
             Route("/consent", consent_post, methods=["POST"]),
+            Route("/device", device_authorize, methods=["POST"]),
+            Route("/device/token", device_token, methods=["POST"]),
             *routes,
             *protected,
         ],
@@ -357,5 +404,7 @@ def build_app(mcp_server) -> ASGIApp:
     mcp_app = mcp_server.streamable_http_app()
     app.mount("/mcp", mcp_app, name="mcp")
     # Wrap the whole assembly in session middleware (signed owner login cookie).
-    app = SessionMiddleware(app, secret_key=os.getenv("SESSION_SECRET", "dev-secret"))
+    # Per-boot ephemeral key: consent sessions never survive a restart,
+    # so no durable secret exists that could forge the owner's session.
+    app = SessionMiddleware(app, secret_key=secrets.token_urlsafe(32))
     return app

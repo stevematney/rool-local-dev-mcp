@@ -62,6 +62,15 @@ def init() -> None:
                 login TEXT,
                 created_at INTEGER
             );
+            CREATE TABLE IF NOT EXISTS device_codes (
+                device_code_hash TEXT PRIMARY KEY,
+                user_code TEXT,
+                client_id TEXT,
+                scope TEXT,
+                status TEXT,
+                created_at INTEGER,
+                approved_at INTEGER
+            );
             """
         )
         # Lightweight migration: older dbs created before the `revoked` column
@@ -217,6 +226,98 @@ def is_token_revoked(access_hash: str) -> bool:
             "SELECT revoked FROM tokens WHERE token_hash = ? LIMIT 1", (access_hash,)
         ).fetchone()
     return bool(row and row[0])
+
+
+def new_device_code(client_id: str, scope: str) -> dict[str, str]:
+    """Issue a device/user code pair for the device authorization grant."""
+    device_code = secrets.token_urlsafe(32)
+    user_code = "-".join(
+        "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(4))
+        for _ in range(2)
+    )
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO device_codes (device_code_hash, user_code, client_id, scope, status, created_at) VALUES (?,?,?,?,?,?)",
+            (hash_value(device_code), user_code, client_id, scope, "pending", int(time.time())),
+        )
+    return {"device_code": device_code, "user_code": user_code}
+
+
+def find_device_by_user_code(user_code: str) -> dict[str, Any] | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT device_code_hash, client_id, scope, status FROM device_codes WHERE user_code = ? AND status = 'pending'",
+            (user_code.upper(),),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "device_code_hash": row[0], "client_id": row[1],
+        "scope": row[2], "status": row[3],
+    }
+
+
+def approve_device(device_code_hash: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE device_codes SET status = 'approved', approved_at = ? WHERE device_code_hash = ?",
+            (int(time.time()), device_code_hash),
+        )
+
+
+def consume_device_code(device_code_hash: str) -> dict[str, Any] | None:
+    """Atomically mark an approved device code as consumed, returning its grant info."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT client_id, scope, status FROM device_codes WHERE device_code_hash = ?",
+            (device_code_hash,),
+        ).fetchone()
+        if not row or row[2] != "approved":
+            return None
+        conn.execute("DELETE FROM device_codes WHERE device_code_hash = ?", (device_code_hash,))
+    return {"client_id": row[0], "scope": row[1]}
+
+
+def revoke_device(device_code_hash: str) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM device_codes WHERE device_code_hash = ?", (device_code_hash,))
+
+
+def find_device_by_hash(device_code_hash: str) -> dict[str, Any] | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT device_code_hash, user_code, client_id, scope, status FROM device_codes WHERE device_code_hash = ?",
+            (device_code_hash,),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "device_code_hash": row[0], "user_code": row[1], "client_id": row[2],
+        "scope": row[3], "status": row[4],
+    }
+
+
+def get_client(client_id: str) -> dict[str, Any] | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT client_id, client_name, redirect_uris, scopes FROM clients WHERE client_id = ?",
+            (client_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "client_id": row[0], "client_name": row[1],
+        "redirect_uris": row[2], "scopes": row[3],
+    }
+
+
+def get_last_consent_owner(client_id: str) -> str | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT owner_login FROM consent WHERE client_id = ? ORDER BY granted_at DESC LIMIT 1",
+            (client_id,),
+        ).fetchone()
+    return row[0] if row else None
 
 
 init()

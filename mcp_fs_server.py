@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import glob as stdglob
 import os
 import re
 from pathlib import Path
 
-from wcmatch import glob as wcglob
 
 from dotenv import load_dotenv
 from mcp.server import MCPServer
@@ -51,13 +51,13 @@ DENY_WRITE = READ_ONLY_FOLDERS
 def _deny_regexes(patterns: list[str], folders: list[str]) -> list[re.Pattern[str]]:
     out: list[re.Pattern[str]] = []
     for pattern in patterns:
-        translated = wcglob.translate(
-            pattern, flags=wcglob.GLOBSTAR | wcglob.DOTGLOB)[0]
-        out += [re.compile(t) for t in translated]
+        translated = stdglob.translate(
+            pattern, recursive=True, include_hidden=True)
+        out.append(re.compile(translated))
         if pattern in folders:
-            beneath = wcglob.translate(
-                f"{pattern}/**", flags=wcglob.GLOBSTAR | wcglob.DOTGLOB)[0]
-            out += [re.compile(t) for t in beneath]
+            beneath = stdglob.translate(
+                f"{pattern}/**", recursive=True, include_hidden=True)
+            out.append(re.compile(beneath))
     return out
 
 

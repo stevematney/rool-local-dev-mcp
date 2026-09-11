@@ -13,28 +13,82 @@ Run:  python3 mcp_fs_server.py            (from this directory)
 from __future__ import annotations
 
 import asyncio
-import glob
+import csv
+import glob as stdglob
 import os
 import re
 from pathlib import Path
+
 
 from dotenv import load_dotenv
 from mcp.server import MCPServer
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import AnyHttpUrl
-from deny_list import DENY_LIST
-
 load_dotenv()
 
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
-# The provider doubles as the token verifier: the SDK wraps /mcp with
-# BearerAuthBackend + RequireAuthMiddleware using auth_server_provider.
-# Instantiated once here so MCPServer construction has it; auth.build_app
-# reuses the same provider for the outer AS routes.
-from auth import RoolProvider  # noqa: E402  (after load_dotenv)
+def _env_list(name: str) -> list[str]:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return []
+    return [item.strip() for row in csv.reader([raw]) for item in row if item.strip()]
+
+
+from deny_list import (SENSITIVE_FILES as sensitive_file_defaults,
+                       DENIED_FOLDERS as denied_folder_defaults,
+                       READ_ONLY_FOLDERS as read_only_folder_defaults)
+
+SENSITIVE_FILES = _env_list("SENSITIVE_FILES") + sensitive_file_defaults
+DENIED_FOLDERS = _env_list("DENIED_FOLDERS") + denied_folder_defaults
+READ_ONLY_FOLDERS = _env_list("READ_ONLY_FOLDERS") + read_only_folder_defaults
+DENY_ALL = SENSITIVE_FILES + DENIED_FOLDERS
+DENY_WRITE = READ_ONLY_FOLDERS
+
+
+def _deny_regexes(patterns: list[str]) -> list[re.Pattern[str]]:
+    out: list[re.Pattern[str]] = []
+    for pattern in patterns:
+        out.append(re.compile(stdglob.translate(
+            pattern, recursive=True, include_hidden=True)))
+        if not stdglob.has_magic(pattern):
+            out.append(re.compile(stdglob.translate(
+                f"{pattern}/**", recursive=True, include_hidden=True)))
+    return out
+
+
+DENY_ALL_REGEXES = _deny_regexes(DENY_ALL)
+DENY_WRITE_REGEXES = _deny_regexes(DENY_ALL + DENY_WRITE)
+
+
+def _path_allowed(path: str, *, write: bool = False) -> bool:
+    regexes = DENY_WRITE_REGEXES if write else DENY_ALL_REGEXES
+    return not any(regex.match(path) for regex in regexes)
+
+
+def _abs(p: str | Path) -> Path:
+    return (SANDBOX_ROOT / p).resolve()
+
+
+def _rel(p: str | Path) -> str:
+    return Path(p).resolve().relative_to(SANDBOX_ROOT).as_posix()
+
+
+def _is_safe(p: str | Path, *, write: bool = False) -> bool:
+    candidate = _abs(p)
+    if not candidate.is_relative_to(SANDBOX_ROOT):
+        return False
+    if not _path_allowed(_rel(candidate), write=write):
+        return False
+    if write:
+        return all(_path_allowed(parent.as_posix(), write=True)
+                   for parent in Path(_rel(candidate)).parents
+                   if parent.as_posix() != ".")
+    return True
+
+from auth import RoolProvider  # noqa: E402
 
 auth_provider = RoolProvider()
 
@@ -56,69 +110,51 @@ server = MCPServer(
     auth_server_provider=auth_provider,
 )
 
-DENY_REGEXES = [re.compile(glob.translate(
-    p, recursive=True, include_hidden=True)) for p in DENY_LIST]
-
-
-def _path_allowed(path: str) -> bool:
-    return not any(r.match(path) for r in DENY_REGEXES)
-
-
-def _abs(p: str) -> Path:
-    """Resolve inside SANDBOX_ROOT; escape -> PermissionError."""
-    root = SANDBOX_ROOT.resolve()
-    candidate = (root / p).resolve()
-    if not candidate.is_relative_to(root):
-        raise PermissionError(f"escape attempt blocked: {p}")
-    return candidate
-
 
 @server.tool()
 async def list_dir(path: str) -> str:
     """List a directory under the project sandbox."""
+    if not _is_safe(path):
+        raise ToolError(f"access denied: {path}")
     p = _abs(path)
     if not p.is_dir():
         raise FileNotFoundError(str(p))
-    return "\n".join(sorted(x.name for x in p.iterdir() if _path_allowed(x.relative_to(SANDBOX_ROOT).as_posix())))
+    return "\n".join(sorted(_rel(x) for x in p.iterdir()
+                             if x.is_file() and _is_safe(x)))
 
 
 @server.tool()
 async def read_file(path: str) -> str:
     """Read a file under the project sandbox."""
-    abs_path = _abs(path)
-    if not abs_path.is_file():
-        raise FileNotFoundError(str(abs_path))
-    if not _path_allowed(abs_path.relative_to(SANDBOX_ROOT).as_posix()):
+    if not _is_safe(path):
         raise ToolError(f"access denied: {path}")
-    return _abs(path).read_text(errors="replace")
+    p = _abs(path)
+    if not p.is_file():
+        raise FileNotFoundError(str(p))
+    return p.read_text(errors="replace")
 
 
 @server.tool()
 async def write_file(path: str, content: str) -> str:
     """Write a file under the project sandbox (create/overwrite)."""
+    if not _is_safe(path, write=True):
+        raise ToolError(f"access denied: {path}")
     p = _abs(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)
-    return f"wrote {p.relative_to(SANDBOX_ROOT)}"
+    return f"wrote {_rel(p)}"
 
 
 @server.tool()
 async def search_dir(pattern: str, path: str = ".") -> str:
     """Regex search under the project sandbox."""
-    root = SANDBOX_ROOT.resolve()
+    if not _is_safe(path):
+        raise ToolError(f"access denied: {path}")
     pat = re.compile(pattern)
-    hits = []
-    for f in root.joinpath(path).rglob("*"):
-        if f.is_file():
-            try:
-                txt = f.read_text(errors="replace")
-            except Exception:
-                continue
-            if pat.search(txt):
-                hits.append(f.relative_to(root).as_posix())
-    if not hits:
-        return "(no matches)"
-    return "\n".join(sorted(hits))
+    hits = [_rel(f) for f in _abs(path).rglob("*")
+            if f.is_file() and _is_safe(f)
+            and pat.search(f.read_text(errors="replace"))]
+    return "\n".join(sorted(hits)) or "(no matches)"
 
 
 from auth import build_app  # noqa: E402  (after tools are registered)

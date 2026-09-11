@@ -85,6 +85,11 @@ async def list_dir(path: str) -> str:
 @server.tool()
 async def read_file(path: str) -> str:
     """Read a file under the project sandbox."""
+    abs_path = _abs(path)
+    if not abs_path.is_file():
+        raise FileNotFoundError(str(abs_path))
+    if not _path_allowed(abs_path.relative_to(SANDBOX_ROOT).as_posix()):
+        raise ToolError(f"access denied: {path}")
     return _abs(path).read_text(errors="replace")
 
 

@@ -36,18 +36,18 @@ def _env_list(name: str) -> list[str]:
 
 
 # deny_list.py holds the defaults; .env can override/extend via
-# SENSITIVE_FILES, DENIED_FOLDERS, and WRITABLE_FOLDERS (comma-separated).
+# SENSITIVE_FILES, DENIED_FOLDERS, and READ_ONLY_FOLDERS (comma-separated).
 # DENY_READ paths: never read, never write. DENY_WRITE paths: readable,
 # never writable. Folder entries deny everything beneath them.
 from deny_list import (SENSITIVE_FILES as _SENSITIVE_DEFAULTS,
                        DENIED_FOLDERS as _DENIED_DEFAULTS,
-                       WRITABLE_FOLDERS as _WRITABLE_DEFAULTS)
+                       READ_ONLY_FOLDERS as _READ_ONLY_DEFAULTS)
 
 SENSITIVE_FILES = _env_list("SENSITIVE_FILES") or _SENSITIVE_DEFAULTS
 DENIED_FOLDERS = _env_list("DENIED_FOLDERS") or _DENIED_DEFAULTS
-WRITABLE_FOLDERS = _env_list("WRITABLE_FOLDERS") or _WRITABLE_DEFAULTS
+READ_ONLY_FOLDERS = _env_list("READ_ONLY_FOLDERS") or _READ_ONLY_DEFAULTS
 DENY_READ = SENSITIVE_FILES + DENIED_FOLDERS
-DENY_WRITE = WRITABLE_FOLDERS          # readable, never writable
+DENY_WRITE = READ_ONLY_FOLDERS          # readable, never writable
 
 
 def _deny_regexes(patterns: list[str], folders: list[str]) -> list[re.Pattern[str]]:
@@ -65,7 +65,7 @@ def _deny_regexes(patterns: list[str], folders: list[str]) -> list[re.Pattern[st
 
 
 DENY_READ_REGEXES = _deny_regexes(DENY_READ, DENIED_FOLDERS)
-DENY_WRITE_REGEXES = _deny_regexes(DENY_READ + DENY_WRITE, DENIED_FOLDERS + WRITABLE_FOLDERS)
+DENY_WRITE_REGEXES = _deny_regexes(DENY_READ + DENY_WRITE, DENIED_FOLDERS + READ_ONLY_FOLDERS)
 
 
 def _path_read_allowed(rel: str) -> bool:

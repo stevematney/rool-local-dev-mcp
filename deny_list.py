@@ -9,7 +9,7 @@ Two tiers:
 
 Glob patterns matched against sandbox-relative paths. Folder entries
 deny the folder itself and everything beneath it. Override/extend via
-.env (comma-separated SENSITIVE_FILES / DENIED_FOLDERS / WRITABLE_FOLDERS).
+.env (comma-separated SENSITIVE_FILES / DENIED_FOLDERS / READ_ONLY_FOLDERS).
 
 Kept deliberately conservative: universally agreed-to-be-secret (or
 universally generated) entries only. Project-specific additions belong
@@ -55,7 +55,7 @@ DENIED_FOLDERS = [
 ]
 
 # readable, never writable (generated/ephemeral content)
-WRITABLE_FOLDERS = [
+READ_ONLY_FOLDERS = [
     ".venv",
     "venv",
     "__pycache__",
@@ -68,4 +68,4 @@ WRITABLE_FOLDERS = [
 ]
 
 DENY_READ = SENSITIVE_FILES + DENIED_FOLDERS
-DENY_ALL = DENY_READ + WRITABLE_FOLDERS   # never write
+DENY_ALL = DENY_READ + READ_ONLY_FOLDERS   # never write

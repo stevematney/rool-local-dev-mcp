@@ -13,6 +13,7 @@ Run:  python3 mcp_fs_server.py            (from this directory)
 from __future__ import annotations
 
 import asyncio
+import csv
 import os
 import re
 from pathlib import Path
@@ -31,16 +32,18 @@ BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 def _env_list(name: str) -> list[str]:
     raw = os.getenv(name, "").strip()
-    return [item.strip() for item in raw.split(",") if item.strip()]
+    if not raw:
+        return []
+    return [item.strip() for row in csv.reader([raw]) for item in row if item.strip()]
 
 
 from deny_list import (SENSITIVE_FILES as sensitive_file_defaults,
                        DENIED_FOLDERS as denied_folder_defaults,
                        READ_ONLY_FOLDERS as read_only_folder_defaults)
 
-SENSITIVE_FILES = _env_list("SENSITIVE_FILES") or sensitive_file_defaults
-DENIED_FOLDERS = _env_list("DENIED_FOLDERS") or denied_folder_defaults
-READ_ONLY_FOLDERS = _env_list("READ_ONLY_FOLDERS") or read_only_folder_defaults
+SENSITIVE_FILES = _env_list("SENSITIVE_FILES") + sensitive_file_defaults
+DENIED_FOLDERS = _env_list("DENIED_FOLDERS") + denied_folder_defaults
+READ_ONLY_FOLDERS = _env_list("READ_ONLY_FOLDERS") + read_only_folder_defaults
 DENY_READ = SENSITIVE_FILES + DENIED_FOLDERS
 DENY_WRITE = READ_ONLY_FOLDERS
 

@@ -68,14 +68,25 @@ def _path_allowed(path: str, *, write: bool = False) -> bool:
     return not any(regex.match(path) for regex in regexes)
 
 
-def _abs(p: str, *, write: bool = False) -> Path:
-    root = SANDBOX_ROOT.resolve()
-    candidate = (root / p).resolve()
-    if not candidate.is_relative_to(root):
-        raise PermissionError(f"escape attempt blocked: {p}")
-    if not _path_allowed(candidate.relative_to(root).as_posix(), write=write):
-        raise PermissionError(f"access denied: {p}")
-    return candidate
+def _abs(p: str | Path) -> Path:
+    return (SANDBOX_ROOT / p).resolve()
+
+
+def _rel(p: str | Path) -> str:
+    return Path(p).resolve().relative_to(SANDBOX_ROOT).as_posix()
+
+
+def _is_safe(p: str | Path, *, write: bool = False) -> bool:
+    candidate = _abs(p)
+    if not candidate.is_relative_to(SANDBOX_ROOT):
+        return False
+    if not _path_allowed(_rel(candidate), write=write):
+        return False
+    if write:
+        return all(_path_allowed(parent.as_posix(), write=True)
+                   for parent in Path(_rel(candidate)).parents
+                   if parent.as_posix() != ".")
+    return True
 
 from auth import RoolProvider  # noqa: E402
 
@@ -103,66 +114,47 @@ server = MCPServer(
 @server.tool()
 async def list_dir(path: str) -> str:
     """List a directory under the project sandbox."""
+    if not _is_safe(path):
+        raise ToolError(f"access denied: {path}")
     p = _abs(path)
     if not p.is_dir():
         raise FileNotFoundError(str(p))
-    root = SANDBOX_ROOT.resolve()
-    return "\n".join(sorted(
-        x.name for x in p.iterdir()
-        if (x.resolve().is_relative_to(root)
-            and _path_allowed(x.resolve().relative_to(root).as_posix()))))
+    return "\n".join(sorted(_rel(x) for x in p.iterdir()
+                             if x.is_file() and _is_safe(x)))
 
 
 @server.tool()
 async def read_file(path: str) -> str:
     """Read a file under the project sandbox."""
-    abs_path = _abs(path)
-    if not abs_path.is_file():
-        raise FileNotFoundError(str(abs_path))
-    if not _path_allowed(abs_path.relative_to(SANDBOX_ROOT).as_posix()):
+    if not _is_safe(path):
         raise ToolError(f"access denied: {path}")
-    return _abs(path).read_text(errors="replace")
+    p = _abs(path)
+    if not p.is_file():
+        raise FileNotFoundError(str(p))
+    return p.read_text(errors="replace")
 
 
 @server.tool()
 async def write_file(path: str, content: str) -> str:
     """Write a file under the project sandbox (create/overwrite)."""
-    p = _abs(path, write=True)
-    rel = p.relative_to(SANDBOX_ROOT).as_posix()
-    denied_ancestors = [
-        parent for parent in Path(rel).parents if str(parent) != "."
-        and not _path_allowed(parent.as_posix(), write=True)]
-    if not _path_allowed(rel, write=True) or denied_ancestors:
+    if not _is_safe(path, write=True):
         raise ToolError(f"access denied: {path}")
+    p = _abs(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)
-    return f"wrote {rel}"
+    return f"wrote {_rel(p)}"
 
 
 @server.tool()
 async def search_dir(pattern: str, path: str = ".") -> str:
     """Regex search under the project sandbox."""
-    root = SANDBOX_ROOT.resolve()
-    _abs(path)
+    if not _is_safe(path):
+        raise ToolError(f"access denied: {path}")
     pat = re.compile(pattern)
-    hits = []
-    for f in root.joinpath(path).rglob("*"):
-        if f.is_file():
-            target = f.resolve()
-            if not target.is_relative_to(root):
-                continue
-            rel = target.relative_to(root).as_posix()
-            if not _path_allowed(rel):
-                continue
-            try:
-                txt = f.read_text(errors="replace")
-            except Exception:
-                continue
-            if pat.search(txt):
-                hits.append(rel)
-    if not hits:
-        return "(no matches)"
-    return "\n".join(sorted(hits))
+    hits = [_rel(f) for f in _abs(path).rglob("*")
+            if f.is_file() and _is_safe(f)
+            and pat.search(f.read_text(errors="replace"))]
+    return "\n".join(sorted(hits)) or "(no matches)"
 
 
 from auth import build_app  # noqa: E402  (after tools are registered)

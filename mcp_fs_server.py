@@ -44,7 +44,7 @@ from deny_list import (SENSITIVE_FILES as sensitive_file_defaults,
 SENSITIVE_FILES = _env_list("SENSITIVE_FILES") + sensitive_file_defaults
 DENIED_FOLDERS = _env_list("DENIED_FOLDERS") + denied_folder_defaults
 READ_ONLY_FOLDERS = _env_list("READ_ONLY_FOLDERS") + read_only_folder_defaults
-DENY_READ = SENSITIVE_FILES + DENIED_FOLDERS
+DENY_ALL = SENSITIVE_FILES + DENIED_FOLDERS
 DENY_WRITE = READ_ONLY_FOLDERS
 
 
@@ -61,12 +61,12 @@ def _deny_regexes(patterns: list[str], folders: list[str]) -> list[re.Pattern[st
     return out
 
 
-DENY_READ_REGEXES = _deny_regexes(DENY_READ, DENIED_FOLDERS)
-DENY_WRITE_REGEXES = _deny_regexes(DENY_READ + DENY_WRITE, DENIED_FOLDERS + READ_ONLY_FOLDERS)
+DENY_ALL_REGEXES = _deny_regexes(DENY_ALL, DENIED_FOLDERS)
+DENY_WRITE_REGEXES = _deny_regexes(DENY_ALL + DENY_WRITE, DENIED_FOLDERS + READ_ONLY_FOLDERS)
 
 
 def _path_allowed(path: str, *, write: bool = False) -> bool:
-    regexes = DENY_WRITE_REGEXES if write else DENY_READ_REGEXES
+    regexes = DENY_WRITE_REGEXES if write else DENY_ALL_REGEXES
     return not any(regex.match(path) for regex in regexes)
 
 

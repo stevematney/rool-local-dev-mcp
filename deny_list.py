@@ -1,14 +1,22 @@
 """Default deny-lists for the filesystem sandbox.
 
-SENSITIVE_FILES: glob patterns matched against sandbox-relative paths.
-DENIED_FOLDERS: directory entries — the folder itself and everything
-beneath it is denied. Override/extend via .env (comma-separated).
+Two tiers:
+- DENY_READ: never readable, never writable. Secrets, key material,
+  credential stores, VCS internals.
+- DENY_WRITE: readable, never writable. Generated/ephemeral content
+  (dependency trees, caches) where read access helps the agent but a
+  write would be corrupting.
 
-Kept deliberately conservative: these are universally agreed-to-be-
-secret files across ecosystems. Project-specific additions belong in
-.env, not here.
+Glob patterns matched against sandbox-relative paths. Folder entries
+deny the folder itself and everything beneath it. Override/extend via
+.env (comma-separated SENSITIVE_FILES / DENIED_FOLDERS / WRITABLE_FOLDERS).
+
+Kept deliberately conservative: universally agreed-to-be-secret (or
+universally generated) entries only. Project-specific additions belong
+in .env, not here.
 """
 
+# never read, never write
 SENSITIVE_FILES = [
     # environment / secrets
     ".env",
@@ -39,10 +47,6 @@ DENIED_FOLDERS = [
     ".git",
     ".hg",
     ".svn",
-    ".venv",
-    "venv",
-    "__pycache__",
-    "node_modules",
     ".ssh",
     ".aws",             # credentials/config
     ".gnupg",
@@ -50,4 +54,18 @@ DENIED_FOLDERS = [
     ".docker",
 ]
 
-DENY_LIST = SENSITIVE_FILES + DENIED_FOLDERS
+# readable, never writable (generated/ephemeral content)
+WRITABLE_FOLDERS = [
+    ".venv",
+    "venv",
+    "__pycache__",
+    "node_modules",
+    "dist",
+    "build",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+]
+
+DENY_READ = SENSITIVE_FILES + DENIED_FOLDERS
+DENY_ALL = DENY_READ + WRITABLE_FOLDERS   # never write

@@ -36,28 +36,46 @@ def _env_list(name: str) -> list[str]:
 
 
 # deny_list.py holds the defaults; .env can override/extend via
-# SENSITIVE_FILES and DENIED_FOLDERS (comma-separated). Folder entries
-# deny everything beneath them; file patterns deny exact/glob matches.
-from deny_list import SENSITIVE_FILES as _SENSITIVE_DEFAULTS
-from deny_list import DENIED_FOLDERS as _DENIED_DEFAULTS
+# SENSITIVE_FILES, DENIED_FOLDERS, and WRITABLE_FOLDERS (comma-separated).
+# DENY_READ paths: never read, never write. DENY_WRITE paths: readable,
+# never writable. Folder entries deny everything beneath them.
+from deny_list import (SENSITIVE_FILES as _SENSITIVE_DEFAULTS,
+                       DENIED_FOLDERS as _DENIED_DEFAULTS,
+                       WRITABLE_FOLDERS as _WRITABLE_DEFAULTS)
 
 SENSITIVE_FILES = _env_list("SENSITIVE_FILES") or _SENSITIVE_DEFAULTS
 DENIED_FOLDERS = _env_list("DENIED_FOLDERS") or _DENIED_DEFAULTS
-DENY_LIST = SENSITIVE_FILES + DENIED_FOLDERS
-
-_deny_globs: list[str] = []
-for _p in DENY_LIST:
-    if _p in DENIED_FOLDERS:
-        _deny_globs += [_p, f"{_p}/**"]  # folder itself and everything beneath
-    else:
-        _deny_globs.append(_p)
-DENY_REGEXES = [re.compile(translated) for _p in _deny_globs
-                for translated in wcglob.translate(_p, flags=wcglob.GLOBSTAR | wcglob.DOTGLOB)[0]]
+WRITABLE_FOLDERS = _env_list("WRITABLE_FOLDERS") or _WRITABLE_DEFAULTS
+DENY_READ = SENSITIVE_FILES + DENIED_FOLDERS
+DENY_WRITE = WRITABLE_FOLDERS          # readable, never writable
 
 
-def _path_allowed(rel: str) -> bool:
-    """True unless rel matches a deny pattern (resolved, sandbox-relative)."""
-    return not any(r.match(rel) for r in DENY_REGEXES)
+def _deny_regexes(patterns: list[str], folders: list[str]) -> list[re.Pattern[str]]:
+    """Globs; folder entries also deny everything beneath (folder + folder/**)."""
+    out: list[re.Pattern[str]] = []
+    for _p in patterns:
+        for translated in wcglob.translate(
+                _p, flags=wcglob.GLOBSTAR | wcglob.DOTGLOB)[0]:
+            out.append(re.compile(translated))
+        if _p in folders:
+            for translated in wcglob.translate(
+                    f"{_p}/**", flags=wcglob.GLOBSTAR | wcglob.DOTGLOB)[0]:
+                out.append(re.compile(translated))
+    return out
+
+
+DENY_READ_REGEXES = _deny_regexes(DENY_READ, DENIED_FOLDERS)
+DENY_WRITE_REGEXES = _deny_regexes(DENY_READ + DENY_WRITE, DENIED_FOLDERS + WRITABLE_FOLDERS)
+
+
+def _path_read_allowed(rel: str) -> bool:
+    """True unless rel matches a DENY_READ pattern."""
+    return not any(r.match(rel) for r in DENY_READ_REGEXES)
+
+
+def _path_write_allowed(rel: str) -> bool:
+    """True unless rel matches DENY_READ or DENY_WRITE patterns."""
+    return not any(r.match(rel) for r in DENY_WRITE_REGEXES)
 
 
 # The provider doubles as the token verifier: the SDK wraps /mcp with
@@ -86,18 +104,19 @@ server = MCPServer(
     auth_server_provider=auth_provider,
 )
 
-def _path_allowed(path: str) -> bool:
-    """True unless rel matches a deny pattern (resolved, sandbox-relative)."""
-    return not any(r.match(path) for r in DENY_REGEXES)
+def _path_allowed(path: str, *, write: bool = False) -> bool:
+    """True unless rel matches deny patterns. write=True adds DENY_WRITE."""
+    regexes = DENY_WRITE_REGEXES if write else DENY_READ_REGEXES
+    return not any(r.match(path) for r in regexes)
 
 
-def _abs(p: str) -> Path:
+def _abs(p: str, *, write: bool = False) -> Path:
     """Resolve inside SANDBOX_ROOT; escape or deny-list hit -> PermissionError."""
     root = SANDBOX_ROOT.resolve()
     candidate = (root / p).resolve()
     if not candidate.is_relative_to(root):
         raise PermissionError(f"escape attempt blocked: {p}")
-    if not _path_allowed(candidate.relative_to(root).as_posix()):
+    if not _path_allowed(candidate.relative_to(root).as_posix(), write=write):
         raise PermissionError(f"access denied: {p}")
     return candidate
 
@@ -129,12 +148,13 @@ async def read_file(path: str) -> str:
 @server.tool()
 async def write_file(path: str, content: str) -> str:
     """Write a file under the project sandbox (create/overwrite)."""
-    p = _abs(path)
+    p = _abs(path, write=True)
     rel = p.relative_to(SANDBOX_ROOT).as_posix()
-    if not _path_allowed(rel):
+    if not _path_allowed(rel, write=True):
         raise ToolError(f"access denied: {path}")
     # deny every ancestor directory too (can't mkdir into a denied folder)
-    if any(not _path_allowed(rel_parent.as_posix()) for rel_parent in Path(rel).parents if str(rel_parent) != "."):
+    if any(not _path_allowed(rel_parent.as_posix(), write=True)
+           for rel_parent in Path(rel).parents if str(rel_parent) != "."):
         raise ToolError(f"access denied: {path}")
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)
@@ -145,7 +165,7 @@ async def write_file(path: str, content: str) -> str:
 async def search_dir(pattern: str, path: str = ".") -> str:
     """Regex search under the project sandbox."""
     root = SANDBOX_ROOT.resolve()
-    _abs(path)  # raises on escape
+    _abs(path)  # raises on escape (read-level deny applies to traversal)
     pat = re.compile(pattern)
     hits = []
     for f in root.joinpath(path).rglob("*"):

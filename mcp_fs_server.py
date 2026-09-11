@@ -48,21 +48,19 @@ DENY_ALL = SENSITIVE_FILES + DENIED_FOLDERS
 DENY_WRITE = READ_ONLY_FOLDERS
 
 
-def _deny_regexes(patterns: list[str], folders: list[str]) -> list[re.Pattern[str]]:
+def _deny_regexes(patterns: list[str]) -> list[re.Pattern[str]]:
     out: list[re.Pattern[str]] = []
     for pattern in patterns:
-        translated = stdglob.translate(
-            pattern, recursive=True, include_hidden=True)
-        out.append(re.compile(translated))
-        if pattern in folders:
-            beneath = stdglob.translate(
-                f"{pattern}/**", recursive=True, include_hidden=True)
-            out.append(re.compile(beneath))
+        out.append(re.compile(stdglob.translate(
+            pattern, recursive=True, include_hidden=True)))
+        if not stdglob.has_magic(pattern):
+            out.append(re.compile(stdglob.translate(
+                f"{pattern}/**", recursive=True, include_hidden=True)))
     return out
 
 
-DENY_ALL_REGEXES = _deny_regexes(DENY_ALL, DENIED_FOLDERS)
-DENY_WRITE_REGEXES = _deny_regexes(DENY_ALL + DENY_WRITE, DENIED_FOLDERS + READ_ONLY_FOLDERS)
+DENY_ALL_REGEXES = _deny_regexes(DENY_ALL)
+DENY_WRITE_REGEXES = _deny_regexes(DENY_ALL + DENY_WRITE)
 
 
 def _path_allowed(path: str, *, write: bool = False) -> bool:

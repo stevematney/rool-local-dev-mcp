@@ -13,21 +13,51 @@ Run:  python3 mcp_fs_server.py            (from this directory)
 from __future__ import annotations
 
 import asyncio
-import glob
 import os
 import re
 from pathlib import Path
+
+from wcmatch import glob as wcglob
 
 from dotenv import load_dotenv
 from mcp.server import MCPServer
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import AnyHttpUrl
-from deny_list import DENY_LIST
-
 load_dotenv()
 
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+
+
+def _env_list(name: str) -> list[str]:
+    """Parse a comma-separated .env list; empty/unset -> []."""
+    raw = os.getenv(name, "").strip()
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+# deny_list.py holds the defaults; .env can override/extend via
+# SENSITIVE_FILES and DENIED_FOLDERS (comma-separated). Folder entries
+# deny everything beneath them; file patterns deny exact/glob matches.
+from deny_list import SENSITIVE_FILES as _SENSITIVE_DEFAULTS
+from deny_list import DENIED_FOLDERS as _DENIED_DEFAULTS
+
+SENSITIVE_FILES = _env_list("SENSITIVE_FILES") or _SENSITIVE_DEFAULTS
+DENIED_FOLDERS = _env_list("DENIED_FOLDERS") or _DENIED_DEFAULTS
+DENY_LIST = SENSITIVE_FILES + DENIED_FOLDERS
+
+_deny_globs: list[str] = []
+for _p in DENY_LIST:
+    if _p in DENIED_FOLDERS:
+        _deny_globs += [_p, f"{_p}/**"]  # folder itself and everything beneath
+    else:
+        _deny_globs.append(_p)
+DENY_REGEXES = [re.compile(translated) for _p in _deny_globs
+                for translated in wcglob.translate(_p, flags=wcglob.GLOBSTAR | wcglob.DOTGLOB)[0]]
+
+
+def _path_allowed(rel: str) -> bool:
+    """True unless rel matches a deny pattern (resolved, sandbox-relative)."""
+    return not any(r.match(rel) for r in DENY_REGEXES)
 
 
 # The provider doubles as the token verifier: the SDK wraps /mcp with
@@ -56,20 +86,19 @@ server = MCPServer(
     auth_server_provider=auth_provider,
 )
 
-DENY_REGEXES = [re.compile(glob.translate(
-    p, recursive=True, include_hidden=True)) for p in DENY_LIST]
-
-
 def _path_allowed(path: str) -> bool:
+    """True unless rel matches a deny pattern (resolved, sandbox-relative)."""
     return not any(r.match(path) for r in DENY_REGEXES)
 
 
 def _abs(p: str) -> Path:
-    """Resolve inside SANDBOX_ROOT; escape -> PermissionError."""
+    """Resolve inside SANDBOX_ROOT; escape or deny-list hit -> PermissionError."""
     root = SANDBOX_ROOT.resolve()
     candidate = (root / p).resolve()
     if not candidate.is_relative_to(root):
         raise PermissionError(f"escape attempt blocked: {p}")
+    if not _path_allowed(candidate.relative_to(root).as_posix()):
+        raise PermissionError(f"access denied: {p}")
     return candidate
 
 
@@ -79,7 +108,11 @@ async def list_dir(path: str) -> str:
     p = _abs(path)
     if not p.is_dir():
         raise FileNotFoundError(str(p))
-    return "\n".join(sorted(x.name for x in p.iterdir() if _path_allowed(x.relative_to(SANDBOX_ROOT).as_posix())))
+    root = SANDBOX_ROOT.resolve()
+    return "\n".join(sorted(
+        x.name for x in p.iterdir()
+        if (x.resolve().is_relative_to(root)
+            and _path_allowed(x.resolve().relative_to(root).as_posix()))))
 
 
 @server.tool()
@@ -97,25 +130,38 @@ async def read_file(path: str) -> str:
 async def write_file(path: str, content: str) -> str:
     """Write a file under the project sandbox (create/overwrite)."""
     p = _abs(path)
+    rel = p.relative_to(SANDBOX_ROOT).as_posix()
+    if not _path_allowed(rel):
+        raise ToolError(f"access denied: {path}")
+    # deny every ancestor directory too (can't mkdir into a denied folder)
+    if any(not _path_allowed(rel_parent.as_posix()) for rel_parent in Path(rel).parents if str(rel_parent) != "."):
+        raise ToolError(f"access denied: {path}")
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)
-    return f"wrote {p.relative_to(SANDBOX_ROOT)}"
+    return f"wrote {rel}"
 
 
 @server.tool()
 async def search_dir(pattern: str, path: str = ".") -> str:
     """Regex search under the project sandbox."""
     root = SANDBOX_ROOT.resolve()
+    _abs(path)  # raises on escape
     pat = re.compile(pattern)
     hits = []
     for f in root.joinpath(path).rglob("*"):
         if f.is_file():
+            target = f.resolve()
+            if not target.is_relative_to(root):
+                continue  # symlink out of sandbox
+            rel = target.relative_to(root).as_posix()
+            if not _path_allowed(rel):
+                continue
             try:
                 txt = f.read_text(errors="replace")
             except Exception:
                 continue
             if pat.search(txt):
-                hits.append(f.relative_to(root).as_posix())
+                hits.append(rel)
     if not hits:
         return "(no matches)"
     return "\n".join(sorted(hits))

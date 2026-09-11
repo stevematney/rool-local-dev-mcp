@@ -13,6 +13,7 @@ Run:  python3 mcp_fs_server.py            (from this directory)
 from __future__ import annotations
 
 import asyncio
+import glob
 import os
 import re
 from pathlib import Path
@@ -20,7 +21,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 from mcp.server import MCPServer
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import AnyHttpUrl
+from deny_list import DENY_LIST
 
 load_dotenv()
 
@@ -53,6 +56,13 @@ server = MCPServer(
     auth_server_provider=auth_provider,
 )
 
+DENY_REGEXES = [re.compile(glob.translate(
+    p, recursive=True, include_hidden=True)) for p in DENY_LIST]
+
+
+def _path_allowed(path: str) -> bool:
+    return not any(r.match(path) for r in DENY_REGEXES)
+
 
 def _abs(p: str) -> Path:
     """Resolve inside SANDBOX_ROOT; escape -> PermissionError."""
@@ -69,7 +79,7 @@ async def list_dir(path: str) -> str:
     p = _abs(path)
     if not p.is_dir():
         raise FileNotFoundError(str(p))
-    return "\n".join(sorted(x.name for x in p.iterdir()))
+    return "\n".join(sorted(x.name for x in p.iterdir() if _path_allowed(x.relative_to(SANDBOX_ROOT).as_posix())))
 
 
 @server.tool()

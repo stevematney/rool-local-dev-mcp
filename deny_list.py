@@ -1,0 +1,3 @@
+SENSITIVE_FILES = [".env"]
+DENIED_FOLDERS = [".git", ".venv", "__pycache__"]
+DENY_LIST = SENSITIVE_FILES + DENIED_FOLDERS

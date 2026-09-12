@@ -104,6 +104,8 @@ sequenceDiagram
     Server-->>Agent: MCP session (tools, resources)
 ```
 
+![Auth flow sequence diagram](docs/auth-flow.png)
+
 ### Notes
 
 - **Registration requires `authorization_code` and `response_types:

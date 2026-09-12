@@ -78,33 +78,11 @@ itself via dynamic client registration and the OAuth device grant.
 The flow below is the delegated-authorization path an MCP agent takes.
 Steps 1-2 are done once per client; steps 3-9 repeat per session.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Agent as MCP agent
-    participant Server as rool-local-dev-mcp
-    participant Owner as Owner (browser)
-    participant GitHub as GitHub OAuth
-
-    Agent->>Server: POST /register (RFC 7591 metadata)
-    Server-->>Agent: client_id
-    Agent->>Server: POST /device (client_id, scope)
-    Server-->>Agent: device_code, user_code, verification_uri
-    Agent->>Owner: "open verification_uri?user_code=..."
-    Owner->>Server: GET /consent?user_code=...
-    Server->>Owner: redirect to GitHub login
-    Owner->>GitHub: authorize app
-    GitHub-->>Server: callback (code)
-    Server->>GitHub: exchange code for owner identity
-    Server-->>Owner: consent page: client name, scopes
-    Owner->>Server: POST /consent (approve)
-    Agent->>Server: POST /device/token (device_code, client_id)
-    Server-->>Agent: access_token + refresh_token
-    Agent->>Server: POST /mcp (Bearer access_token)
-    Server-->>Agent: MCP session (tools, resources)
-```
 
 ![Auth flow sequence diagram](docs/auth-flow.png)
+
+(The diagram source lives at [`docs/auth-flow.mmd`](docs/auth-flow.mmd); regenerate the
+image with [mermaid.ink](https://mermaid.ink) or any mermaid renderer.)
 
 ### Notes
 

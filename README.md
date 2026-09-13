@@ -17,10 +17,10 @@ cp .env.example .env   # then fill in the values
 python ./launcher.py   # or ./start.sh
 ```
 
-**TODO: update to respect configured PORT and BIND_HOST**
-Expose it publicly with `ngrok http 8000` (or your own tunnel) and set
-`BASE_URL` to the public URL. The approval UI binds `127.0.0.1:8080` and
-is intentionally never proxied — only someone at the machine can approve.
+Expose it publicly with `ngrok http $PORT` (or your own tunnel) and set
+`BASE_URL` to the public URL. The approval UI binds to a loopback address
+only and is intentionally never proxied — only someone at the machine can
+approve.
 
 ## Configuration
 
@@ -82,12 +82,11 @@ Deny-list semantics:
 - Writes also check **ancestor directories**, so a denied folder cannot be
   created into via a nested `propose_change`.
 
-**TODO: Better formatting so this isn't a floating "#4" in the middle of the text.**
-**TODO: Edit to reflect configured loopback port, not hardcoded 8080.** 4. **Propose-then-approve** — the server never mutates on its own. The
+4. **Propose-then-approve** — the server never mutates on its own. The
 agent calls `propose_change` — the only path for file creation and changes
 — which computes and stores a deterministic diff and returns a proposal id
 and an approval URL. A human approves or rejects — with commentary — on a
-loopback-only web UI (`127.0.0.1:8080`, never exposed through the tunnel);
+loopback-only web UI (never exposed through the tunnel);
 the held tool call resumes when the decision lands. A staleness guard hashes
 the target at propose time and blocks the apply if the file changed in between.
 

@@ -27,26 +27,26 @@ sensitive_file_defaults = [
 ]
 
 denied_folder_defaults = [
-    "**/.git", "**/.git/**",
-    "**/.hg", "**/.hg/**",
-    "**/.svn", "**/.svn/**",
-    "**/.ssh", "**/.ssh/**",
-    "**/.aws", "**/.aws/**",
-    "**/.gnupg", "**/.gnupg/**",
-    "**/.kube", "**/.kube/**",
-    "**/.docker", "**/.docker/**",
+    "**/.git",
+    "**/.hg",
+    "**/.svn",
+    "**/.ssh",
+    "**/.aws",
+    "**/.gnupg",
+    "**/.kube",
+    "**/.docker",
 ]
 
 read_only_folder_defaults = [
-    "**/.venv", "**/.venv/**",
-    "**/venv", "**/venv/**",
-    "**/__pycache__", "**/__pycache__/**",
-    "**/node_modules", "**/node_modules/**",
-    "**/dist", "**/dist/**",
-    "**/build", "**/build/**",
-    "**/.pytest_cache", "**/.pytest_cache/**",
-    "**/.mypy_cache", "**/.mypy_cache/**",
-    "**/.ruff_cache", "**/.ruff_cache/**",
+    "**/.venv",
+    "**/venv",
+    "**/__pycache__",
+    "**/node_modules",
+    "**/dist",
+    "**/build",
+    "**/.pytest_cache",
+    "**/.mypy_cache",
+    "**/.ruff_cache",
 ]
 
 

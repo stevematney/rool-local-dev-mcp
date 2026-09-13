@@ -63,9 +63,11 @@ DENY_WRITE_REGEXES = [re.compile(glob.translate(
 
 
 def _path_allowed(path: str, *, write: bool = False) -> bool:
-    if any(r.match(path) for r in DENY_ALL_REGEXES):
+    parts = Path(path).parts
+    prefixes = ["/".join(parts[:i]) for i in range(1, len(parts) + 1)]
+    if any(r.match(p) for r in DENY_ALL_REGEXES for p in prefixes):
         return False
-    if write and any(r.match(path) for r in DENY_WRITE_REGEXES):
+    if write and any(r.match(p) for r in DENY_WRITE_REGEXES for p in prefixes):
         return False
     return True
 

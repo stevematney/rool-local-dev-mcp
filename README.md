@@ -30,7 +30,9 @@ Env entries extend (not replace) the built-in defaults, parsed as CSV
 Deny-list semantics:
 
 - Every entry is a glob, compiled to a regex via [`glob.translate`](https://docs.python.org/3/library/glob.html);
-  a path is denied if the regex matches it in any way.
+  a path is denied if the regex matches the path **or any of its parent
+  directories** — so a bare folder name (`.git`) blocks the folder and
+  everything inside it, with no `**` ceremony needed.
 - Matching runs on the **resolved** path (symlinks resolved, `..`
   normalized), so indirection cannot reach a denied file.
 - **Deny always wins** — the deny-list is checked after path-grant

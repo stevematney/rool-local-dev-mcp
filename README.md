@@ -74,7 +74,9 @@ is intentionally never proxied — only someone at the machine can approve.
 
 The server composes an OAuth 2.1 authorization server with the MCP
 resource server. Owners authenticate with GitHub (a GitHub OAuth app is
-the upstream identity provider); MCP clients authenticate with the server
+the upstream identity provider — the only IdP implemented so far, not
+the only one possible; others can be added behind the same consent
+gate); MCP clients authenticate with the server
 itself via dynamic client registration and the OAuth device grant.
 
 ### Endpoints

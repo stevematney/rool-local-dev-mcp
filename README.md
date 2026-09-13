@@ -30,19 +30,17 @@ Env entries extend (not replace) the built-in defaults, parsed as CSV
 Deny-list semantics:
 
 - Every entry is a glob, compiled to a regex via [`glob.translate`](https://docs.python.org/3/library/glob.html);
-  a path is denied if the regex matches the path **or any of its parent
-  directories** — so a bare folder name (`.git`) blocks the folder and
-  everything inside it, with no `**` ceremony needed.
+  a path is denied if the regex matches any part of the full filepath.
 - Matching runs on the **resolved** path (symlinks resolved, `..`
   normalized), so indirection cannot reach a denied file.
 - **Deny always wins** — the deny-list is checked after path-grant
   resolution.
 - Writes also check **ancestor directories**, so a denied folder cannot be
-  created into via a nested `write_file`.
+  created into via a nested `propose_change`.
 
-4. **Propose-then-approve** — the server never mutates on its own. Write
-   tools land as proposals: the agent calls `propose_change`, which
-   computes and stores a deterministic diff and returns a proposal id and
+4. **Propose-then-approve** — the server never mutates on its own. The
+   agent calls `propose_change` — the only mutation path, for both
+   creating new files and modifying existing ones — which computes and stores a deterministic diff and returns a proposal id and
    an approval URL. A human approves or rejects — with commentary — on a
    loopback-only web UI (`127.0.0.1:8080`, never exposed through the
    tunnel); the held tool call resumes when the decision lands. A
@@ -56,8 +54,9 @@ Deny-list semantics:
 | `list_dir` | deny-list (read tier) |
 | `read_file` | deny-list (read tier) |
 | `search_dir` | deny-list (read tier) |
-| `write_file` | deny-list (write tier) |
 | `propose_change` / `wait_for_approval` | deny-list (write tier) + human approval |
+
+`propose_change` is also the file-creation path — there is no direct-write tool.
 
 ## Quick start
 
@@ -75,7 +74,9 @@ is intentionally never proxied — only someone at the machine can approve.
 
 The server composes an OAuth 2.1 authorization server with the MCP
 resource server. Owners authenticate with GitHub (a GitHub OAuth app is
-the upstream identity provider); MCP clients authenticate with the server
+the upstream identity provider — the only IdP implemented so far, not
+the only one possible; others can be added behind the same consent
+gate); MCP clients authenticate with the server
 itself via dynamic client registration and the OAuth device grant.
 
 ### Endpoints

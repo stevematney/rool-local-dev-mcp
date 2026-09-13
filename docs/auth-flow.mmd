@@ -1,0 +1,23 @@
+sequenceDiagram
+    autonumber
+    participant Agent as MCP agent
+    participant Server as rool-local-dev-mcp
+    participant Owner as Owner (browser)
+    participant GitHub as GitHub OAuth
+
+    Agent->>Server: POST /register (RFC 7591 metadata)
+    Server-->>Agent: client_id
+    Agent->>Server: POST /device (client_id, scope)
+    Server-->>Agent: device_code, user_code, verification_uri
+    Agent->>Owner: "open verification_uri?user_code=..."
+    Owner->>Server: GET /consent?user_code=...
+    Server->>Owner: redirect to GitHub login
+    Owner->>GitHub: authorize app
+    GitHub-->>Server: callback (code)
+    Server->>GitHub: exchange code for owner identity
+    Server-->>Owner: consent page: client name, scopes
+    Owner->>Server: POST /consent (approve)
+    Agent->>Server: POST /device/token (device_code, client_id)
+    Server-->>Agent: access_token + refresh_token
+    Agent->>Server: POST /mcp (Bearer access_token)
+    Server-->>Agent: MCP session (tools, resources)

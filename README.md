@@ -5,6 +5,8 @@ A zero-trust filesystem bridge for AI agents: a sandboxed MCP server over HTTP (
 ## Quick start
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 cp [.env.example](.env.example) .env   # then fill in the values
 python ./launcher.py   # or ./start.sh
@@ -28,6 +30,14 @@ tiers above are the only configuration with security semantics:
 - everything else (`PORT`, `BIND_HOST`, `SANDBOX_ROOT`, `NGROK_URL`,
   `BASE_URL`, GitHub OAuth app values, `OWNER_GITHUB`) is operational
   configuration with no access-control effect
+
+## Code map
+
+[`deny_list.py`](deny_list.py) holds the defaults and the tier model;
+[`mcp_fs_server.py`](mcp_fs_server.py) implements the MCP tools and the `_is_safe` gate;
+[`auth.py`](auth.py) composes the OAuth AS and consent flow; [`db.py`](db.py) is the store
+for clients, tokens, grants, proposals, and audit records (SQLite, hashed
+secrets, no plaintext tokens).
 
 ## Security model
 
@@ -147,18 +157,3 @@ for. An agent can be prompted (or hijacked) into requesting a folder that
 happens to contain live secrets, SSH keys, or cloud credentials. The
 deny-list draws those lines once, at the choke point, so no future grant
 or sloppy path handling can cross them.
-
-## Development
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python ./launcher.py
-```
-
-[`deny_list.py`](deny_list.py) holds the defaults and the tier model;
-[`mcp_fs_server.py`](mcp_fs_server.py) implements the MCP tools and the `_is_safe` gate;
-[`auth.py`](auth.py) composes the OAuth AS and consent flow; [`db.py`](db.py) is the store
-for clients, tokens, grants, proposals, and audit records (SQLite, hashed
-secrets, no plaintext tokens).

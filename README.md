@@ -8,7 +8,7 @@ A zero-trust filesystem bridge for AI agents: a sandboxed MCP server over HTTP (
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp [.env.example](.env.example) .env   # then fill in the values
+cp .env.example .env   # then fill in the values
 python ./launcher.py   # or ./start.sh
 ```
 

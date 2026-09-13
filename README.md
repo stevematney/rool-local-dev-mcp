@@ -77,6 +77,79 @@ Deny-list semantics:
    staleness guard hashes the target at propose time and blocks the apply
    if the file changed in between.
 
+## Tools
+
+| Tool | Gated by |
+| --- | --- |
+| `list_dir` | deny-list (read tier) |
+| `read_file` | deny-list (read tier) |
+| `search_dir` | deny-list (read tier) |
+| `propose_change` / `wait_for_approval` | deny-list (write tier) + human approval |
+
+`propose_change` is also the file-creation path — there is no direct-write tool.
+
+## Auth flow
+
+The server composes an OAuth 2.1 authorization server with the MCP
+resource server ([OAuth 2.1 draft](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1);
+[MCP authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)).
+Owners authenticate with GitHub, and will need to
+configure a GitHub OAuth app (and populate the appropriate values in
+[`.env`](.env.example)) to utilize delegated auth. (A GitHub OAuth app is the only
+available upstream identity provider as of now, but others can be
+added. PRs welcome!); MCP clients authenticate with the server
+itself via dynamic client registration and the OAuth device grant.
+
+### Endpoints
+
+| Path | Purpose |
+| --- | --- |
+| `/health` | Liveness probe |
+| `/register` | Dynamic client registration ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html)) |
+| `/authorize` | OAuth authorization endpoint (consent-gated) |
+| `/consent` | Owner consent page (GitHub-authenticated session) |
+| `/device` | Device grant start ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html)) |
+| `/device/token` | Device token polling |
+| `/token` | Authorization-code / refresh-token exchange |
+| `/mcp` | MCP streamable-HTTP transport (Bearer-protected) |
+| `/approve/<id>` | Proposal approval UI (loopback only) |
+
+### Sequence
+
+The flow below is the delegated-authorization path an MCP agent takes.
+Steps 1-2 are done once per client; steps 3-9 repeat per session.
+
+![Auth flow sequence diagram](docs/auth-flow.png)
+
+(The diagram source lives at [`docs/auth-flow.mmd`](docs/auth-flow.mmd);
+regenerate the image with [mermaid.ink](https://mermaid.ink) or any
+mermaid renderer.)
+
+### Notes
+
+- **Registration requires `authorization_code` and `response_types:
+  ["code"]`** even for device-only clients, because RFC 7591 metadata
+  validation expects them. Headless clients should include both plus the
+  device grant type.
+- The device poll lives at `/device/token`, not `/token`.
+- Access tokens are bearer tokens, stored hashed; refresh tokens rotate on
+  use and can be revoked.
+- The consent gate requires an owner session: only the GitHub account in
+  `OWNER_GITHUB` can approve a client's device grant.
+- The server enforces DNS-rebinding protection on the MCP transport
+  (`allowed_hosts` / `allowed_origins` from `BASE_URL`).
+
+## Why a deny-list in a grant world
+
+Consent is about *what the agent asked for*; the deny-list is about *what
+the owner never wants the agent to touch*, regardless of what it asks
+for. An agent can be prompted (or hijacked) into requesting a folder that
+happens to contain live secrets, SSH keys, or cloud credentials. The
+deny-list draws those lines once, at the choke point, so no future grant
+or sloppy path handling can cross them.
+
+## Development
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate

@@ -140,7 +140,7 @@ pip install -r requirements.txt
 python ./launcher.py
 ```
 
-`deny_list.py` holds the defaults and the tier model;
+[`deny_list.py`](deny_list.py) holds the defaults and the tier model;
 [`mcp_fs_server.py`](mcp_fs_server.py) implements the MCP tools and the `_is_safe` gate;
 [`auth.py`](auth.py) composes the OAuth AS and consent flow; [`db.py`](db.py) is the store
 for clients, tokens, grants, proposals, and audit records (SQLite, hashed

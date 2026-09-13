@@ -1,18 +1,13 @@
 # rool-local-dev-mcp
 
-A zero-trust filesystem bridge for AI agents: a sandboxed MCP server over
-HTTP where the agent starts with **no access at all** and every capability
-is an owner-provided allowance. OAuth 2.1 proves who is connected; consent
-grants prove what they may touch; a deny-list draws lines no grant can
-cross; and every mutation is proposed by the agent and applied only after
-a human approves it.
+A zero-trust filesystem bridge for AI agents: a sandboxed MCP server over HTTP (running on the owner's local machine) where the agent starts with **no access at all** and every capability is an owner-provided allowance. OAuth 2.1 proves who is connected; consent grants prove what they may touch; a deny-list draws lines no grant can cross; and every mutation is proposed by the agent and applied only after a human approves it.
 
 ## Security model
 
 Access is layered, and each layer fails closed:
 
 1. **Connection (OAuth 2.1)** — MCP clients authenticate via dynamic client
-   registration and the device grant; the owner authenticates with GitHub.
+   registration and the device grant; the owner authenticates with GitHub  (currently the only supported authentication platform).
    Authentication grants no filesystem access by itself.
 2. **Folder consent** — the server starts knowing no folders. A client
    attempting a path gets `permission required`, which starts a consent
@@ -26,22 +21,20 @@ Access is layered, and each layer fails closed:
 | Variable | Tier | Behavior |
 | --- | --- | --- |
 | `SENSITIVE_FILES` | `DENY_ALL` | Never readable or writable, anywhere |
-| `DENIED_FOLDERS` | `DENY_ALL` | The folder and everything beneath it |
+| `DENIED_FOLDERS` | `DENY_ALL` | Semantically "folders"; functionally identical to `SENSITIVE_FILES` |
 | `READ_ONLY_FOLDERS` | `DENY_WRITE` | Readable; writes always denied |
 
 Env entries extend (not replace) the built-in defaults, parsed as CSV
-(quote entries containing commas). Defaults cover credential stores
-(`.ssh/`, `.aws/`, `.kube/`, `.gnupg/`, `.docker/`), key material
-(`*.pem`, `*.key`, `id_rsa*`, …), VCS internals (`.git/`, `.hg/`,
-`.svn/`), other package managers (`node_modules/`, `.pypirc`, `.npmrc`,
-…), and infrastructure state (`terraform.tfstate*`, `*.tfvars`).
+(quote entries containing commas).
 
 Deny-list semantics:
 
+- Every entry is a glob, compiled to a regex via [`glob.translate`](https://docs.python.org/3/library/glob.html);
+  a path is denied if the regex matches the path **or any of its parent
+  directories** — so a bare folder name (`.git`) blocks the folder and
+  everything inside it, with no `**` ceremony needed.
 - Matching runs on the **resolved** path (symlinks resolved, `..`
   normalized), so indirection cannot reach a denied file.
-- A pattern with no glob metacharacters is treated as a **folder** and
-  denied along with everything beneath it; glob patterns match by name.
 - **Deny always wins** — the deny-list is checked after path-grant
   resolution.
 - Writes also check **ancestor directories**, so a denied folder cannot be

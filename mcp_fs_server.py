@@ -23,7 +23,7 @@ from mcp.server import MCPServer
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import AnyHttpUrl
-from deny_list import DENY_LIST
+from deny_list import DENY_ALL, DENY_WRITE
 
 load_dotenv()
 
@@ -56,12 +56,18 @@ server = MCPServer(
     auth_server_provider=auth_provider,
 )
 
-DENY_REGEXES = [re.compile(glob.translate(
-    p, recursive=True, include_hidden=True)) for p in DENY_LIST]
+DENY_ALL_REGEXES = [re.compile(glob.translate(
+    p, recursive=True, include_hidden=True)) for p in DENY_ALL]
+DENY_WRITE_REGEXES = [re.compile(glob.translate(
+    p, recursive=True, include_hidden=True)) for p in DENY_WRITE]
 
 
-def _path_allowed(path: str) -> bool:
-    return not any(r.match(path) for r in DENY_REGEXES)
+def _path_allowed(path: str, *, write: bool = False) -> bool:
+    if any(r.match(path) for r in DENY_ALL_REGEXES):
+        return False
+    if write and any(r.match(path) for r in DENY_WRITE_REGEXES):
+        return False
+    return True
 
 
 def _abs(p: str) -> Path:

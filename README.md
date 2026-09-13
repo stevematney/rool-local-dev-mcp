@@ -73,6 +73,21 @@ Expose it publicly with `ngrok http 8000` (or your own tunnel) and set
 `BASE_URL` to the public URL. The approval UI binds `127.0.0.1:8080` and
 is intentionally never proxied — only someone at the machine can approve.
 
+## Configuration
+
+All configuration is a single `.env` file;
+[`.env.example`](.env.example) documents every variable and is the
+primary reference — this README doesn't duplicate the list. The deny-list
+tiers above are the only configuration with security semantics:
+
+- the three deny-list variables extend the built-in defaults (never
+  replace them)
+- entries are globs, evaluated against the full path; see the tier table
+  for behavior
+- everything else (`PORT`, `BIND_HOST`, `SANDBOX_ROOT`, `NGROK_URL`,
+  `BASE_URL`, GitHub OAuth app values, `OWNER_GITHUB`) is operational
+  configuration with no access-control effect
+
 ## Auth flow
 
 The server composes an OAuth 2.1 authorization server with the MCP

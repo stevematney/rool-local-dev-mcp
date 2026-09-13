@@ -54,7 +54,9 @@ Deny-list semantics:
 | `list_dir` | deny-list (read tier) |
 | `read_file` | deny-list (read tier) |
 | `search_dir` | deny-list (read tier) |
-| `propose_change` / `wait_for_approval` | deny-list (write tier) + human approval — the only mutation path: creates new files or modifies existing ones as a proposal |
+| `propose_change` / `wait_for_approval` | deny-list (write tier) + human approval |
+
+`propose_change` is also the file-creation path — there is no direct-write tool.
 
 ## Quick start
 

@@ -61,6 +61,17 @@ Access is layered, and each layer fails closed:
 3. **Deny-list (always wins)** — a two-tier deny-list enforced at a single
    choke point (`_is_safe` in [`mcp_fs_server.py`](mcp_fs_server.py)),
    independent of grants: even a fully granted folder cannot expose a denied file.
+4. **Propose-then-approve** — the server never mutates on its own. The
+   agent calls `propose_change` — the only path for file creation and changes
+   — which computes and stores a deterministic diff and returns a proposal id
+   and an approval URL. A human approves or rejects — with commentary — on a
+   loopback-only web UI (never exposed through the tunnel);
+   the held tool call resumes when the decision lands. A staleness guard hashes
+   the target at propose time and blocks the apply if the file changed in between.
+
+## Deny-list environment variables
+
+The deny-list has two tiers. The tier variables below map onto them:
 
 | Variable            | Tier         | Behavior                                                            |
 | ------------------- | ------------ | ------------------------------------------------------------------- |
@@ -81,14 +92,6 @@ Deny-list semantics:
 - **Deny always wins** — the deny-list is checked after path-grant resolution.
 - Writes also check **ancestor directories**, so a denied folder cannot be
   created into via a nested `propose_change`.
-
-4. **Propose-then-approve** — the server never mutates on its own. The
-   agent calls `propose_change` — the only path for file creation and changes
-   — which computes and stores a deterministic diff and returns a proposal id
-   and an approval URL. A human approves or rejects — with commentary — on a
-   loopback-only web UI (never exposed through the tunnel);
-   the held tool call resumes when the decision lands. A staleness guard hashes
-   the target at propose time and blocks the apply if the file changed in between.
 
 ## Tools
 

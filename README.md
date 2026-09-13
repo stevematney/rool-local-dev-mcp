@@ -2,12 +2,51 @@
 
 A zero-trust filesystem bridge for AI agents: a sandboxed MCP server over HTTP (running on the owner's local machine) where the agent starts with **no access at all** and every capability is an owner-provided allowance. OAuth 2.1 proves who is connected; consent grants prove what they may touch; a deny-list draws lines no grant can cross; and every mutation is proposed by the agent and applied only after a human approves it.
 
+## Quick start
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # then fill in the values
+python ./launcher.py   # or ./start.sh
+```
+
+Expose it publicly with `ngrok http 8000` (or your own tunnel) and set
+`BASE_URL` to the public URL. The approval UI binds `127.0.0.1:8080` and
+is intentionally never proxied — only someone at the machine can approve.
+
+## Configuration
+
+All configuration is a single `.env` file;
+[`.env.example`](.env.example) documents every variable and is the
+primary reference — this README doesn't duplicate the list. The deny-list
+tiers above are the only configuration with security semantics:
+
+- the three deny-list variables extend the built-in defaults (never
+  replace them)
+- entries are globs, evaluated against the full path; see the tier table
+  for behavior
+- everything else (`PORT`, `BIND_HOST`, `SANDBOX_ROOT`, `NGROK_URL`,
+  `BASE_URL`, GitHub OAuth app values, `OWNER_GITHUB`) is operational
+  configuration with no access-control effect
+
+## Code map
+
+[`deny_list.py`](deny_list.py) holds the defaults and the tier model;
+[`mcp_fs_server.py`](mcp_fs_server.py) implements the MCP tools and the `_is_safe` gate;
+[`auth.py`](auth.py) composes the OAuth AS and consent flow; [`db.py`](db.py) is the store
+for clients, tokens, grants, proposals, and audit records (SQLite, hashed
+secrets, no plaintext tokens).
+
 ## Security model
 
 Access is layered, and each layer fails closed:
 
 1. **Connection (OAuth 2.1)** — MCP clients authenticate via dynamic client
-   registration and the device grant; the owner authenticates with GitHub  (currently the only supported authentication platform).
+   registration and the device grant ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html),
+   [RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html)); the owner
+   authenticates with GitHub  (currently the only supported authentication platform).
    Authentication grants no filesystem access by itself.
 2. **Folder consent** — the server starts knowing no folders. A client
    attempting a path gets `permission required`, which starts a consent
@@ -15,7 +54,7 @@ Access is layered, and each layer fails closed:
    read-write, optionally with expiry. Grants are persisted and revocable;
    revocation instantly returns a folder to zero-privilege.
 3. **Deny-list (always wins)** — a two-tier deny-list enforced at a single
-   choke point (`_is_safe` in `mcp_fs_server.py`), independent of grants:
+   choke point (`_is_safe` in [`mcp_fs_server.py`](mcp_fs_server.py)), independent of grants:
    even a fully granted folder cannot expose a denied file.
 
 | Variable | Tier | Behavior |
@@ -24,7 +63,8 @@ Access is layered, and each layer fails closed:
 | `DENIED_FOLDERS` | `DENY_ALL` | Semantically "folders"; functionally identical to `SENSITIVE_FILES` |
 | `READ_ONLY_FOLDERS` | `DENY_WRITE` | Readable; writes always denied |
 
-Env entries extend (not replace) the built-in defaults, parsed as CSV
+Env entries extend (not replace) the built-in defaults
+([`deny_list.py`](deny_list.py)), parsed as CSV
 (quote entries containing commas).
 
 Deny-list semantics:
@@ -58,25 +98,16 @@ Deny-list semantics:
 
 `propose_change` is also the file-creation path — there is no direct-write tool.
 
-## Quick start
-
-```bash
-pip install -r requirements.txt
-cp .env.example .env   # then fill in the values
-python ./launcher.py   # or ./start.sh
-```
-
-Expose it publicly with `ngrok http 8000` (or your own tunnel) and set
-`BASE_URL` to the public URL. The approval UI binds `127.0.0.1:8080` and
-is intentionally never proxied — only someone at the machine can approve.
-
 ## Auth flow
 
 The server composes an OAuth 2.1 authorization server with the MCP
-resource server. Owners authenticate with GitHub (a GitHub OAuth app is
-the upstream identity provider — the only IdP implemented so far, not
-the only one possible; others can be added behind the same consent
-gate); MCP clients authenticate with the server
+resource server ([OAuth 2.1 draft](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1);
+[MCP authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)).
+Owners authenticate with GitHub, and will need to
+configure a [GitHub OAuth app](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app) (and populate the appropriate values in
+[`.env`](.env.example)) to utilize delegated auth. (A GitHub OAuth app is the only
+available upstream identity provider as of now, but others can be
+added. PRs welcome!); MCP clients authenticate with the server
 itself via dynamic client registration and the OAuth device grant.
 
 ### Endpoints
@@ -84,10 +115,10 @@ itself via dynamic client registration and the OAuth device grant.
 | Path | Purpose |
 | --- | --- |
 | `/health` | Liveness probe |
-| `/register` | Dynamic client registration (RFC 7591) |
+| `/register` | Dynamic client registration ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html)) |
 | `/authorize` | OAuth authorization endpoint (consent-gated) |
 | `/consent` | Owner consent page (GitHub-authenticated session) |
-| `/device` | Device grant start (RFC 8628) |
+| `/device` | Device grant start ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html)) |
 | `/device/token` | Device token polling |
 | `/token` | Authorization-code / refresh-token exchange |
 | `/mcp` | MCP streamable-HTTP transport (Bearer-protected) |
@@ -126,18 +157,3 @@ for. An agent can be prompted (or hijacked) into requesting a folder that
 happens to contain live secrets, SSH keys, or cloud credentials. The
 deny-list draws those lines once, at the choke point, so no future grant
 or sloppy path handling can cross them.
-
-## Development
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python ./launcher.py
-```
-
-`deny_list.py` holds the defaults and the tier model;
-`mcp_fs_server.py` implements the MCP tools and the `_is_safe` gate;
-`auth.py` composes the OAuth AS and consent flow; `db.py` is the store
-for clients, tokens, grants, proposals, and audit records (SQLite, hashed
-secrets, no plaintext tokens).

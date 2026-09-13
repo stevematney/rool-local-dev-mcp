@@ -83,12 +83,12 @@ Deny-list semantics:
   created into via a nested `propose_change`.
 
 4. **Propose-then-approve** — the server never mutates on its own. The
-agent calls `propose_change` — the only path for file creation and changes
-— which computes and stores a deterministic diff and returns a proposal id
-and an approval URL. A human approves or rejects — with commentary — on a
-loopback-only web UI (never exposed through the tunnel);
-the held tool call resumes when the decision lands. A staleness guard hashes
-the target at propose time and blocks the apply if the file changed in between.
+   agent calls `propose_change` — the only path for file creation and changes
+   — which computes and stores a deterministic diff and returns a proposal id
+   and an approval URL. A human approves or rejects — with commentary — on a
+   loopback-only web UI (never exposed through the tunnel);
+   the held tool call resumes when the decision lands. A staleness guard hashes
+   the target at propose time and blocks the apply if the file changed in between.
 
 ## Tools
 

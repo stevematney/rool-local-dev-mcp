@@ -36,11 +36,11 @@ Deny-list semantics:
 - **Deny always wins** — the deny-list is checked after path-grant
   resolution.
 - Writes also check **ancestor directories**, so a denied folder cannot be
-  created into via a nested `write_file`.
+  created into via a nested `propose_change`.
 
-4. **Propose-then-approve** — the server never mutates on its own. Write
-   tools land as proposals: the agent calls `propose_change`, which
-   computes and stores a deterministic diff and returns a proposal id and
+4. **Propose-then-approve** — the server never mutates on its own. The
+   agent calls `propose_change` — the only mutation path, for both
+   creating new files and modifying existing ones — which computes and stores a deterministic diff and returns a proposal id and
    an approval URL. A human approves or rejects — with commentary — on a
    loopback-only web UI (`127.0.0.1:8080`, never exposed through the
    tunnel); the held tool call resumes when the decision lands. A
@@ -54,8 +54,7 @@ Deny-list semantics:
 | `list_dir` | deny-list (read tier) |
 | `read_file` | deny-list (read tier) |
 | `search_dir` | deny-list (read tier) |
-| `write_file` | deny-list (write tier) |
-| `propose_change` / `wait_for_approval` | deny-list (write tier) + human approval |
+| `propose_change` / `wait_for_approval` | deny-list (write tier) + human approval — the only mutation path: creates new files or modifies existing ones as a proposal |
 
 ## Quick start
 

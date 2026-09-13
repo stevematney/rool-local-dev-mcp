@@ -65,7 +65,7 @@ Deny-list semantics:
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # then fill in the values
+cp [.env.example](.env.example) .env   # then fill in the values
 python ./launcher.py   # or ./start.sh
 ```
 
@@ -80,7 +80,7 @@ resource server ([OAuth 2.1 draft](https://datatracker.ietf.org/doc/html/draft-i
 [MCP authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)).
 Owners authenticate with GitHub, and will need to
 configure a GitHub OAuth app (and populate the appropriate values in
-`.env`) to utilize delegated auth. (A GitHub OAuth app is the only
+[`.env`](.env.example)) to utilize delegated auth. (A GitHub OAuth app is the only
 available upstream identity provider as of now, but others can be
 added. PRs welcome!); MCP clients authenticate with the server
 itself via dynamic client registration and the OAuth device grant.

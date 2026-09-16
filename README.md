@@ -9,20 +9,36 @@ the agent to be applied only after a human approves it.
 
 ## Quick start
 
+rool-local-dev-mcp is a Python app: an MCP server that runs on your own
+machine, exposing selected folders to AI agents over the internet with
+zero-trust access control. You connect MCP clients (like Claude) to it via
+a public HTTPS URL, and the server runs behind an ngrok tunnel that
+`start.sh` manages for you.
+
+You'll need two things installed before starting:
+
+- [Python 3.11+](https://www.python.org/downloads/)
+- [ngrok](https://ngrok.com) (with an account, so you can claim a static domain)
+
+Then:
+
 ```bash
 cp .env.example .env   # then fill in the values
 ./start.sh             # creates .venv, installs deps, runs the server + ngrok tunnel
 ```
 
-That's it — `start.sh` creates the virtualenv on first run, installs
-dependencies, then launches the server and an ngrok tunnel together.
-Tunneling is configured in `.env`, not on the command line: set `NGROK_URL`
-to your ngrok static-domain URL and `BASE_URL` to the same public URL
-(see [`.env.example`](.env.example)). No tunnel binary other than `ngrok`
-on `PATH` is needed.
+`start.sh` does everything: on first run it creates a Python virtual
+environment and installs dependencies, then starts the server and the
+ngrok tunnel together.
 
-The approval UI binds to a loopback address only and is intentionally never
-proxied — only someone at the machine can approve.
+Before running, fill in `.env` (copied from `.env.example`, which documents
+every variable). The one thing ngrok can't infer is your public address:
+in the ngrok dashboard, claim a static domain, then set both `NGROK_URL`
+and `BASE_URL` in `.env` to that same URL.
+
+When it's running, the console prints the public URL that MCP clients
+connect to. The approval UI binds to a loopback address only and is
+intentionally never proxied — only someone at the machine can approve.
 
 ## Configuration
 

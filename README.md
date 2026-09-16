@@ -61,7 +61,7 @@ Access is layered, and each layer fails closed:
    read-write, optionally with expiry. Grants are persisted and revocable;
    revocation instantly returns a folder to zero-privilege.
 3. **Deny-list (always wins)** — a two-tier deny-list enforced at a single
-   choke point (`_is_safe` in [`mcp_fs_server.py`](mcp_fs_server.py)),
+   choke point (`_is_safe` in [`app/mcp_fs_server.py`](app/mcp_fs_server.py)),
    independent of grants: even a fully granted folder cannot expose a denied file.
 4. **Propose-then-approve** — the server never mutates on its own. The
    agent calls `propose_change` — the only path for file creation and changes
@@ -82,7 +82,7 @@ The deny-list has two tiers. The tier variables below map onto them:
 | `READ_ONLY_FOLDERS` | `DENY_WRITE` | Readable; writes always denied                                      |
 
 Env entries extend (not replace) the built-in defaults
-([`deny_list.py`](deny_list.py)), parsed as CSV
+([`app/deny_list.py`](app/deny_list.py)), parsed as CSV
 (quote entries containing commas).
 
 Deny-list semantics:

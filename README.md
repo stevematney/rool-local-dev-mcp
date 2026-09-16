@@ -10,11 +10,8 @@ the agent to be applied only after a human approves it.
 ## Quick start
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
 cp .env.example .env   # then fill in the values
-python ./launcher.py   # or ./start.sh
+./start.sh             # creates .venv, installs deps, runs the server
 ```
 
 Expose it publicly with `ngrok http $PORT` (or your own tunnel) and set
@@ -38,9 +35,9 @@ primary reference.
 
 ## Code map
 
-[`deny_list.py`](deny_list.py) holds the defaults and the tier model;
-[`mcp_fs_server.py`](mcp_fs_server.py) implements the MCP tools and the `_is_safe` gate;
-[`auth.py`](auth.py) composes the OAuth AS and consent flow; [`db.py`](db.py) is the store
+[`app/deny_list.py`](app/deny_list.py) holds the defaults and the tier model;
+[`app/mcp_fs_server.py`](app/mcp_fs_server.py) implements the MCP tools and the `_is_safe` gate;
+[`app/auth.py`](app/auth.py) composes the OAuth AS and consent flow; [`app/db.py`](app/db.py) is the store
 for clients, tokens, grants, proposals, and audit records (SQLite, hashed
 secrets, no plaintext tokens).
 

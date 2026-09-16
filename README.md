@@ -10,17 +10,19 @@ the agent to be applied only after a human approves it.
 ## Quick start
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
 cp .env.example .env   # then fill in the values
-python ./launcher.py   # or ./start.sh
+./start.sh             # creates .venv, installs deps, runs the server + ngrok tunnel
 ```
 
-Expose it publicly with `ngrok http $PORT` (or your own tunnel) and set
-`BASE_URL` to the public URL. The approval UI binds to a loopback address
-only and is intentionally never proxied — only someone at the machine can
-approve.
+That's it — `start.sh` creates the virtualenv on first run, installs
+dependencies, then launches the server and an ngrok tunnel together.
+Tunneling is configured in `.env`, not on the command line: set `NGROK_URL`
+to your ngrok static-domain URL and `BASE_URL` to the same public URL
+(see [`.env.example`](.env.example)). No tunnel binary other than `ngrok`
+on `PATH` is needed.
+
+The approval UI binds to a loopback address only and is intentionally never
+proxied — only someone at the machine can approve.
 
 ## Configuration
 
@@ -38,9 +40,9 @@ primary reference.
 
 ## Code map
 
-[`deny_list.py`](deny_list.py) holds the defaults and the tier model;
-[`mcp_fs_server.py`](mcp_fs_server.py) implements the MCP tools and the `_is_safe` gate;
-[`auth.py`](auth.py) composes the OAuth AS and consent flow; [`db.py`](db.py) is the store
+[`app/deny_list.py`](app/deny_list.py) holds the defaults and the tier model;
+[`app/mcp_fs_server.py`](app/mcp_fs_server.py) implements the MCP tools and the `_is_safe` gate;
+[`app/auth.py`](app/auth.py) composes the OAuth AS and consent flow; [`app/db.py`](app/db.py) is the store
 for clients, tokens, grants, proposals, and audit records (SQLite, hashed
 secrets, no plaintext tokens).
 
@@ -59,7 +61,7 @@ Access is layered, and each layer fails closed:
    read-write, optionally with expiry. Grants are persisted and revocable;
    revocation instantly returns a folder to zero-privilege.
 3. **Deny-list (always wins)** — a two-tier deny-list enforced at a single
-   choke point (`_is_safe` in [`mcp_fs_server.py`](mcp_fs_server.py)),
+   choke point (`_is_safe` in [`app/mcp_fs_server.py`](app/mcp_fs_server.py)),
    independent of grants: even a fully granted folder cannot expose a denied file.
 4. **Propose-then-approve** — the server never mutates on its own. The
    agent calls `propose_change` — the only path for file creation and changes
@@ -80,7 +82,7 @@ The deny-list has two tiers. The tier variables below map onto them:
 | `READ_ONLY_FOLDERS` | `DENY_WRITE` | Readable; writes always denied                                      |
 
 Env entries extend (not replace) the built-in defaults
-([`deny_list.py`](deny_list.py)), parsed as CSV
+([`app/deny_list.py`](app/deny_list.py)), parsed as CSV
 (quote entries containing commas).
 
 Deny-list semantics:

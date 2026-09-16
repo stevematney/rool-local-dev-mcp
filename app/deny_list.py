@@ -1,4 +1,6 @@
 SENSITIVE_FILES = [
+    # the server's own auth database — part of the app, not user data
+    "rool_fs.db",
     # environment / secrets
     ".env",
     ".env.*",

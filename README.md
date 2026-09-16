@@ -11,13 +11,18 @@ the agent to be applied only after a human approves it.
 
 ```bash
 cp .env.example .env   # then fill in the values
-./start.sh             # creates .venv, installs deps, runs the server
+./start.sh             # creates .venv, installs deps, runs the server + ngrok tunnel
 ```
 
-Expose it publicly with `ngrok http $PORT` (or your own tunnel) and set
-`BASE_URL` to the public URL. The approval UI binds to a loopback address
-only and is intentionally never proxied — only someone at the machine can
-approve.
+That's it — `start.sh` creates the virtualenv on first run, installs
+dependencies, then launches the server and an ngrok tunnel together.
+Tunneling is configured in `.env`, not on the command line: set `NGROK_URL`
+to your ngrok static-domain URL and `BASE_URL` to the same public URL
+(see [`.env.example`](.env.example)). No tunnel binary other than `ngrok`
+on `PATH` is needed.
+
+The approval UI binds to a loopback address only and is intentionally never
+proxied — only someone at the machine can approve.
 
 ## Configuration
 

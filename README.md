@@ -1,5 +1,10 @@
 # rool-local-dev-mcp
 
+> [!WARNING]
+> This README describes the finished design. Parts of the application
+> are not built yet — see [`docs/FEATURES.md`](docs/FEATURES.md) for
+> the current state of development progress.
+
 Originating as a tool for pair programming, `rool-local-dev-mcp` is a
 zero-trust filesystem bridge for AI agents: a sandboxed MCP server over HTTP
 (running on the owner's local machine) where the agent starts with

@@ -1,26 +1,55 @@
 # rool-local-dev-mcp
 
-A zero-trust filesystem bridge for AI agents: a sandboxed MCP server over HTTP
+Originating as a tool for pair programming, `rool-local-dev-mcp` is a
+zero-trust filesystem bridge for AI agents: a sandboxed MCP server over HTTP
 (running on the owner's local machine) where the agent starts with
 **no access at all** and every capability is an owner-provided allowance.
+
 OAuth 2.1 proves who is connected; consent grants prove what they may touch;
-a deny-list draws lines no grant can cross; and every mutation is proposed by
-the agent to be applied only after a human approves it.
+a static deny-list draws lines no grant can cross; and every mutation is
+proposed by the agent to be applied only after a human approves it.
 
 ## Quick start
 
+The app is written in Python and runs on your machine. It exposes
+allow-listed folders as an MCP filesystem server, reachable over HTTP
+by remote agents. The server starts knowing nothing: folders are exposed
+only after you grant permission. Mutations (file writes, etc.) are only
+allowed with express permission granted in real time.
+
+Most AI coding harnesses (Claude, Copilot, Cursor) run where your files live,
+and are built with direct tools for reading and editing. This project
+targets the other kind: agents that run in a hosted environment with no access
+to your machine — Rool agents, for instance — and whose only way to reach your
+computer is over the network. For such agents this server is the bridge: it lets
+agents list, read, search, and (with your approval) write files on your local
+machine. Agents connect through a public HTTPS URL behind an ngrok tunnel
+that `start.sh` manages for you.
+
+You'll need two things installed before starting:
+
+- [Python 3.11+](https://www.python.org/downloads/)
+- [ngrok](https://ngrok.com) (with an account, so you can claim a static domain)
+
+Then:
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
 cp .env.example .env   # then fill in the values
-python ./launcher.py   # or ./start.sh
+./start.sh             # creates .venv, installs deps, runs the server + ngrok tunnel
 ```
 
-Expose it publicly with `ngrok http $PORT` (or your own tunnel) and set
-`BASE_URL` to the public URL. The approval UI binds to a loopback address
-only and is intentionally never proxied — only someone at the machine can
-approve.
+`start.sh` does everything: on first run it creates a Python virtual
+environment and installs dependencies, then starts the server and the
+ngrok tunnel together.
+
+Before running, fill in `.env` (copied from `.env.example`, which documents
+every variable). The one thing ngrok can't infer is your public address:
+in the ngrok dashboard, claim a static domain, then set both `NGROK_URL`
+and `BASE_URL` in `.env` to that same URL.
+
+When it's running, the console prints the public URL that MCP clients
+connect to. The approval UI binds to a loopback address only and is
+intentionally never proxied — only someone at the machine can approve.
 
 ## Configuration
 
@@ -32,15 +61,15 @@ primary reference.
   (as opposed to replacing them)
 - entries are globs, evaluated against the full path; see the tier table
   for behavior
-- everything else (`PORT`, `BIND_HOST`, `SANDBOX_ROOT`, `NGROK_URL`,
+- everything else (`PORT`, `BIND_HOST`, `NGROK_URL`,
   `BASE_URL`, GitHub OAuth app values, `OWNER_GITHUB`) is operational
   configuration with no access-control effect
 
 ## Code map
 
-[`deny_list.py`](deny_list.py) holds the defaults and the tier model;
-[`mcp_fs_server.py`](mcp_fs_server.py) implements the MCP tools and the `_is_safe` gate;
-[`auth.py`](auth.py) composes the OAuth AS and consent flow; [`db.py`](db.py) is the store
+[`app/deny_list.py`](app/deny_list.py) holds the defaults and the tier model;
+[`app/mcp_fs_server.py`](app/mcp_fs_server.py) implements the MCP tools and the `_is_safe` gate;
+[`app/auth.py`](app/auth.py) composes the OAuth AS and consent flow; [`app/db.py`](app/db.py) is the store
 for clients, tokens, grants, proposals, and audit records (SQLite, hashed
 secrets, no plaintext tokens).
 
@@ -57,9 +86,10 @@ Access is layered, and each layer fails closed:
    attempting a path gets `permission required`, which starts a consent
    flow; the owner grants specific folders, per-grantee, read-only or
    read-write, optionally with expiry. Grants are persisted and revocable;
-   revocation instantly returns a folder to zero-privilege.
+   revocation instantly returns a folder to zero-privilege. A folder grant
+   covers all its sub-folders implicitly — grant the root, reach the tree.
 3. **Deny-list (always wins)** — a two-tier deny-list enforced at a single
-   choke point (`_is_safe` in [`mcp_fs_server.py`](mcp_fs_server.py)),
+   choke point (`_is_safe` in [`app/mcp_fs_server.py`](app/mcp_fs_server.py)),
    independent of grants: even a fully granted folder cannot expose a denied file.
 4. **Propose-then-approve** — the server never mutates on its own. The
    agent calls `propose_change` — the only path for file creation and changes
@@ -80,7 +110,7 @@ The deny-list has two tiers. The tier variables below map onto them:
 | `READ_ONLY_FOLDERS` | `DENY_WRITE` | Readable; writes always denied                                      |
 
 Env entries extend (not replace) the built-in defaults
-([`deny_list.py`](deny_list.py)), parsed as CSV
+([`app/deny_list.py`](app/deny_list.py)), parsed as CSV
 (quote entries containing commas).
 
 Deny-list semantics:

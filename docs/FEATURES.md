@@ -123,3 +123,7 @@ Connect (OAuth) → Consent folder (grant) → Propose (diff, held) → Approve/
 - Approval/commentary transport: instruction file read next turn (inspectable) vs injected directly. (Recommend: instruction file.)
 - Staleness conflict: auto-apply after approve + hash mismatch → block + re-propose. (Recommend: block + re-propose.)
 - Naming: `rool-fs` provisional.
+
+## Future proposals
+
+See [`docs/future/`](docs/future/) for proposed-but-not-planned extensions. Currently: [GitHub API proxy through the MCP server](docs/future/github-api-proxy.md) — agent makes GitHub requests using the server-held OAuth token; reads pass through, writes go through the consent/approval gate.

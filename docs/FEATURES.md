@@ -47,10 +47,10 @@ endpoint reachable, launcher supervises cleanly, server boots, tools respond.
 
 | Feature | Status | Notes |
 |---|---|---|
-| OAuth 2.1 flow (PKCE, dynamic client registration, RFC 8707 resource indicators) | `committed` | Server ships with the auth machinery in the official MCP SDK; we implement a thin provider + persistence only. |
-| Browser consent on first connect | `committed` | Owner approves in a browser; short-lived access token issued. |
-| Automatic refresh-token rotation | `design` | Single-use refresh tokens, stored hashed, rotated on every exchange; no manual rotation. |
-| Revocation (per client / per session) | `design` | Tiny CLI or server page; revoke the client, the session, or all sessions. |
+| OAuth 2.1 flow (PKCE, dynamic client registration, RFC 8707 resource indicators) | `built` | Thin provider + persistence over the SDK's auth machinery. Verified end-to-end over the tunnel: register → device code → owner consent → token → authenticated MCP call. |
+| Browser consent on first connect | `built` | Owner approves in a browser at `/consent`; short-lived access token issued. Pending device-flow approvals surface there for headless clients. |
+| Automatic refresh-token rotation | `built` | Single-use refresh tokens, stored hashed, rotated on every exchange; no manual rotation (`exchange_refresh_token` in `app/auth.py`). |
+| Revocation (per client / per session) | `design` | Token-level access/refresh revocation is built and persisted (RFC 7009-style, `revoke_access`/`revoke_refresh` in `app/db.py`); the tiny CLI or server page for per-client/per-session revocation is not. |
 | **OAuth ≠ permission** | `design` | OAuth proves *who* is connected. It grants **no** folder and **no** write. Permission layers below are strictly separate. |
 
 ## B. Zero-privilege folder consent
@@ -104,7 +104,7 @@ Sequence: **Connect → consent folder → propose (returns URL, holds) → you 
 |---|---|---|
 | Sandboxed fs tools (list/read/write/search) | `built` | `list_dir`, `read_file`, `write_file`, `search_dir`; every path validated; read tools verified over the tunnel |
 | Session-aware tooling | `design` | A tool (e.g. `list_grants`/`session_info`) for the agent to see its granted folders — critically distinguishing the **current session root** (cwd granted at startup) from other grants, since absolute-path listings are otherwise indistinguishable. |
-| Local persistence | `committed` | sqlite: clients, tokens, grants, proposals, audit; hashed secrets, no plaintext tokens |
+| Local persistence | `built` | sqlite: clients, tokens, sessions, device codes, auth codes, consents, hashed secrets; no plaintext tokens (`app/db.py`). Grants, proposals, audit not yet — those land with P3/P4. |
 | Audit log | `design` | grants, proposals, approvals, denials, token rolls timestamped, replayable |
 | git integration | `design` | propose diffs against `git diff`; approval targets a `rool/` branch; commits only with your signal |
 | Durable endpoint | `done` | Stable ngrok domain; never committed to the repo — `.env` only |
